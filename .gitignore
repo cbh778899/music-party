@@ -2,3 +2,6 @@ test*
 node_modules
 
 .env
+
+all_files
+waiting_process
