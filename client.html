@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+        <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+        <script type="text/javascript">
+
+                // set chunk size to 1MB
+                const FILE_CHUNK_SIZE = 1024 * 1024
+                const BASE_URL = ''
+
+                async function getPlaylist() {
+                    const playlists = await (await fetch(`${BASE_URL}/playlists`, {
+                        headers: {'Content-Type': 'application/json'}
+                    })).json()
+
+                    
+                    if(playlists && playlists.length) {
+                        const hlsVideo = loadHLSVideo();
+                        playlists.forEach(playlist=>{
+                            const select_playlist = document.createElement('div')
+                            select_playlist.textContent = playlist
+                            select_playlist.style.display = 'block';
+                            select_playlist.onclick = () => hlsVideo(`${BASE_URL}/retrieve-playlist/${playlist}/${playlist}.m3u8`)
+                            document.body.appendChild(select_playlist)
+                        })
+                    }
+                }
+
+                function loadHLSVideo(url) {
+                    const video_comp = document.getElementById('video')
+                    let hls;
+
+                    if(Hls.isSupported()) {
+                        hls = new Hls();
+                        hls.attachMedia(video_comp);
+                    } else {
+                        throw new Error('HLS not supported!')
+                    }
+
+                    return (url)=>{
+                        hls.loadSource(url);
+                        video_comp.play();
+                    }
+                }
+
+                function submitFiles(evt) {
+                    evt.preventDefault();
+                    const files = evt.target.files.files
+                    for(let i = 0; i < files.length; i++) {
+                        const file = files[i]
+                        const progressBar = document.createElement('div')
+                        document.body.appendChild(progressBar)
+                        uploadFile(file, progressBar)
+                    }
+                }
+
+                function selectFiles(evt) {
+                    const files = evt.target.files;
+                    for(let i = 0; i < files.length; i++) {
+                        const file = files[i]
+                    }
+                }
+
+                async function uploadFile(file, progressElem) {
+                    let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
+                        currentChunkIndex = 0,
+                        fileType = file.type.split('/').shift();
+
+                    function cutFileChunk() {
+                        const start = currentChunkIndex * FILE_CHUNK_SIZE;
+                        const end = Math.min(start + FILE_CHUNK_SIZE, file.size);
+                        sendFileChunk(file.slice(start, end));
+                    }
+
+                    async function sendFileChunk(chunk) {
+                        const searchParams = new URLSearchParams({
+                            filename: file.name,
+                            isSpecialTrunk: (
+                                currentChunkIndex === 0 ? 'start-chunk' :
+                                currentChunkIndex === totalChunks - 1 ? 'end-chunk' : 0
+                            ),
+                            fileType
+                        })
+                        await fetch(`${BASE_URL}/upload-file?${searchParams.toString()}`, {
+                            method: 'POST',
+                            body: chunk,
+                            headers: {'Content-Type': 'application/octet-stream'}
+                        })
+                        currentChunkIndex ++;
+                        progressElem.textContent = `${Math.floor((currentChunkIndex / (totalChunks - 1)) * 100)} %`
+                        currentChunkIndex !== totalChunks && cutFileChunk();
+                    }
+
+                    cutFileChunk();
+                }
+        </script>
+        <script type="text/javascript">
+            window.onload = function() {
+                'use strict';
+                
+                const Eye = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
+                        <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
+                    </svg>`
+
+                const EyeSlash = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A5.944 5.944 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/>
+                        <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/>
+                        <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
+                    </svg>`
+
+                function askLogin() {
+
+                    if(Cookies.get('login-account')) return;
+
+                    function submitLogin(evt) {
+                        evt.preventDefault();
+                        const account = evt.target.account.value;
+                        const password = evt.target.password.value;
+                        
+                        // TODO: ask background to verify
+                        Cookies.set('login-account', account, { expires: 365 } );
+                    }
+
+                    document.body.innerHTML = `
+                    <form id='login-form'>
+                        <span class='description'>请输入账号密码登录，如果账号不存在将会直接创建</span>
+                        <input type='text' name='account' placeholder="请输入您的账号" >
+                        <div id='show-password' class='clickable'>${Eye}</div>
+                        <input type='password' name='password' id='login-password' placeholder='请输入您的密码' >
+                        <button class='clickable' type='submit'>登录</button>
+                    </form>
+                    `
+
+                    let password_display = false;
+
+                    const password_elem = document.getElementById('login-password');
+                    const show_password_elem = document.getElementById('show-password');
+                    show_password_elem.onclick = () => {
+                        password_display = !password_display;
+                        show_password_elem.innerHTML = password_display ? EyeSlash : Eye;
+                        password_elem.type = password_display ? 'text' : 'password';
+                    }
+                    document.getElementById('login-form').onsubmit = submitLogin;
+                }
+
+                askLogin();
+            }
+        </script>
+        <style type="text/css">
+            body {
+                margin: 0;
+                padding: 0;
+            }
+
+            div {
+                display: block;
+                box-sizing: border-box;
+            }
+
+            .clickable:hover {cursor: pointer;}
+
+            #login-form {
+                --input-width: 25vw;
+                --input-height: 50px;
+                --show-pass-icon-height: 25px;
+
+                width: fit-content;
+                max-width: calc(var(--input-width) + 30px);
+                height: fit-content;
+                display: block;
+                position: relative;
+                margin: auto;
+                margin-top: 20vh;
+                text-align: center;
+            }
+
+            #login-form input {
+                width: var(--input-width);
+                height: var(--input-height);
+                border: 1px solid black;
+                border-radius: 10px;
+                display: block;
+                margin: 20px auto;
+                padding: 0 20px;
+                box-sizing: border-box;
+            }
+            #login-form input:focus {outline: none;}
+
+            #login-form #show-password {
+                position: absolute;
+                height: var(--input-height);
+                width: var(--input-height);
+                margin-left: calc(var(--input-width) - var(--input-height));
+                padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
+            }
+
+            #login-form #show-password svg {
+                display: block;
+            }
+
+            #login-form button {
+                width: calc(var(--input-width) - 50px);
+                height: calc(var(--input-height) - 10px);
+                box-sizing: border-box;
+                border-radius: 10px;
+                border: 1px solid black;
+                background-color: red;
+                color: white;
+                font-size: 17px;
+                transition-duration: .5s;
+            }
+            #login-form button:hover {
+                background-color: crimson;
+            }
+        </style>
+    </head>
+    <body>
+    </body>
+</html>
