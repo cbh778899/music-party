@@ -45,6 +45,9 @@ exports.openDB = async function (mode = null, init = false) {
             id INTEGER PRIMARY KEY NOT NULL,
             name TEXT, type TEXT
         )`);
+
+        await close(db);
+        return;
     }
     return db;
 }
