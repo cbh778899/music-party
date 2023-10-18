@@ -1,13 +1,13 @@
 const { OPEN_READONLY, OPEN_READWRITE, OPEN_CREATE } = require('sqlite3');
 const { open, close, get, all, run } = require('./promise_sqlite3')
 
-function formatWhereQuery(whereQuery) {
+function formatWhereQuery(whereQuery, action = null) {
     return (
         ` WHERE ${Object.entries(whereQuery).map(e=>{
             const [key, value] = e;
-            params.push(value);
+            action && action(value, key);
             return `${key}=?`;
-        })}`.join(' AND ')
+        }).join(' AND ')}`
     )
 }
 
@@ -23,8 +23,8 @@ function formatSelectQuery(table, select = '*', whereQuery = null) {
     } else {
         query += '*';
     }
-    query += ' FROM' + table;
-    if(whereQuery) query += formatWhereQuery(whereQuery);
+    query += ' FROM ' + table;
+    if(whereQuery) query += formatWhereQuery(whereQuery, v=>params.push(v));
 
     return { query, params }
 }
@@ -81,7 +81,7 @@ exports.update = async function (table, updateQuery, whereQuery) {
             values.push(value);
             return `${key}=?`
         }).join(', ')
-    }${whereQuery ? formatWhereQuery(whereQuery) : ''}`;
+    }${whereQuery ? formatWhereQuery(whereQuery, v=>values.push(v)) : ''}`;
 
     const db = await exports.openDB();
     const res = await run(db, query, values);
@@ -91,7 +91,11 @@ exports.update = async function (table, updateQuery, whereQuery) {
 
 exports.deleteFrom = async function (table, whereQuery) {
     const db = await exports.openDB();
-    const res = await run(db, `DELETE FROM ${table}${whereQuery ? formatWhereQuery(whereQuery) : ''}`);
+    const params = [];
+    const res = await run(db, 
+        `DELETE FROM ${table}${
+            whereQuery ? formatWhereQuery(whereQuery, v=>params.push(v)) : ''
+        }`, params);
     await close(db);
     return res;
 }
