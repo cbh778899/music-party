@@ -1,11 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();
 
-// main part of get() and all() are pretty much the same,
-// so we are using a general function for both
-function typedGet(type, db, sql, params, callback) {
-    const func = type === 'get' ? db.get : db.all;
+exports.get = function(db, sql, params = [], callback = null) {
     return new Promise(resolve => {
-        func(sql, params, (err, result) => {
+        db.get(sql, params, (err, result) => {
             if(callback) callback(err, result)
             else if(err) throw err;
             resolve(result);
@@ -13,12 +10,14 @@ function typedGet(type, db, sql, params, callback) {
     })
 }
 
-exports.get = function(db, sql, params = [], callback = null) {
-    return typedGet('get', db, sql, params, callback);
-}
-
 exports.all = function(db, sql, params = [], callback = null) {
-    return typedGet('all', db, sql, params, callback);
+    return new Promise(resolve => {
+        db.all(sql, params, (err, result) => {
+            if(callback) callback(err, result)
+            else if(err) throw err;
+            resolve(result);
+        })
+    })
 }
 
 exports.run = function(db, sql, params = [], callback = null) {
