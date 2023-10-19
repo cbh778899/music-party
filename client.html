@@ -177,7 +177,7 @@
 
                 function askLogin() {
 
-                    if(Cookies.get('login-account')) return;
+                    if(Cookies.get('login-account')) return party();
 
                     function submitLogin(evt) {
                         evt.preventDefault();
@@ -191,11 +191,21 @@
                             headers: {'Content-Type': 'application/json'}
                         }).then(async res => {
                             const { result, userID } = await res.json();
-                            console.log(result, userID)
                             if(result !== 'login-failed') {
                                 if(result === 'login-success') showNotification('登陆成功!', 'success')
                                 else if(result === 'account-created') showNotification('注册成功, 将为您登录', 'success')
-                                // Cookies.set('login-account', userID, { expires: 365 } );
+                                Cookies.set('login-account', userID, { expires: 365 } );
+                                if(evt.target['remember-password'].checked) {
+                                    localStorage.setItem('remember-password', true);
+                                    localStorage.setItem('account', account);
+                                    localStorage.setItem('password', password);
+                                } else if(localStorage.getItem('remember-password')) {
+                                    localStorage.removeItem('remember-password');
+                                    localStorage.removeItem('account');
+                                    localStorage.removeItem('password');
+                                }
+                                // go to party main
+                                party();
                             } else {
                                 showNotification('密码不正确!', 'err')
                             }
@@ -205,17 +215,27 @@
                     main.innerHTML = `
                     <form id='login-form'>
                         <span class='description'>请输入账号密码登录，如果账号不存在将会直接创建</span>
-                        <input type='text' name='account' placeholder="请输入您的账号" >
+                        <input type='text' name='account' id='login-account' placeholder="请输入您的账号" >
                         <div id='show-password' class='clickable'>${Eye}</div>
                         <input type='password' name='password' id='login-password' placeholder='请输入您的密码' >
+                        <div class='remember-password-container'>
+                            <input type='checkbox' id='remember-password' name='remember-password'>
+                            <span>记住密码</span>
+                        </div>
                         <button class='clickable' type='submit'>登录</button>
                     </form>
                     `
 
                     let password_display = false;
-
                     const password_elem = document.getElementById('login-password');
                     const show_password_elem = document.getElementById('show-password');
+
+                    if(localStorage.getItem('remember-password')) {
+                        password_elem.value = localStorage.getItem('password');
+                        document.getElementById('login-account').value = localStorage.getItem('account');
+                        document.getElementById('remember-password').checked = true;
+                    }
+
                     show_password_elem.onclick = () => {
                         password_display = !password_display;
                         show_password_elem.innerHTML = password_display ? EyeSlash : Eye;
@@ -224,10 +244,10 @@
                     document.getElementById('login-form').onsubmit = submitLogin;
                 }
 
-                askLogin();
-            }
         </script>
         <style type="text/css">
+            /* global */
+
             body {
                 margin: 0;
                 padding: 0;
@@ -238,7 +258,19 @@
                 box-sizing: border-box;
             }
 
+            #main {
+                width: 100vw;
+                height: 100vh;
+                position: fixed;
+                top: 0;
+                left: 0;
+                z-index: 1;
+                overflow-y: auto;
+            }
+
             .clickable:hover {cursor: pointer;}
+
+            /* notifications */
 
             #notification-container {
                 width: 100vw;
@@ -248,25 +280,24 @@
                 left: 0;
                 z-index: 2;
                 pointer-events: none;
-                /* background-image: linear-gradient(to bottom, black 50%, white 50%); */
 
                 --notification-margin: 20px;
             }
 
             #notification-container .notification {
                 position: relative;
-                /* top: 50%; */
                 top: 100%;
                 transition-duration: .5s;
                 margin: auto;
                 margin-bottom: var(--notification-margin);
-                width: 25%;
+                width: 20%;
                 height: fit-content;
                 padding: 20px;
                 color: white;
                 z-index: 5;
                 pointer-events: initial;
                 border-radius: 7px;
+                font-size: 15px;
             }
             #notification-container .info { background-color: dodgerblue; }
             #notification-container .success { background-color: limegreen; }
@@ -277,14 +308,7 @@
             #notification-container .warn,
             #notification-container .warning { background-color: gold; text-shadow: 1px 1px 2px black; }
 
-            #main {
-                width: 100vw;
-                height: 100vh;
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1;
-            }
+            /* login */
 
             #login-form {
                 --input-width: 25vw;
@@ -299,9 +323,10 @@
                 margin: auto;
                 margin-top: 20vh;
                 text-align: center;
+                margin-bottom: 50px;
             }
 
-            #login-form input {
+            #login-form input:not(input[type='checkbox']) {
                 width: var(--input-width);
                 height: var(--input-height);
                 border: 1px solid black;
@@ -324,6 +349,26 @@
             #login-form #show-password svg {
                 display: block;
             }
+            
+            #login-form .remember-password-container {
+                display: flex;
+                align-items: center;
+                margin-bottom: 20px;
+                align-items: center;
+            }
+
+            #login-form .remember-password-container input {
+                display: inline-block;
+                margin: auto;
+                margin-right: 5px;
+                width: 20px;
+                height: 20px;
+            }
+            #login-form .remember-password-container span {
+                display: inline-block;
+                margin: auto;
+                margin-left: 5px;
+            }
 
             #login-form button {
                 width: calc(var(--input-width) - 50px);
@@ -338,6 +383,25 @@
             }
             #login-form button:hover {
                 background-color: crimson;
+            }
+
+            /* party */
+            .party #video-component,
+            .party #audio-component {
+                width: 100%;
+                position: absolute;
+                background-color: black;
+                display: none;
+            }
+
+            /* mobile view */
+            @media screen and (max-width: 1023px) {
+                #notification-container .notification {
+                    width: 40%;
+                }
+                #login-form {
+                    --input-width: 70vw;
+                }
             }
         </style>
         <title>音趴</title>
