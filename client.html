@@ -99,6 +99,7 @@
         <script type="text/javascript">
             window.onload = function() {
                 'use strict';
+                const BASE_URL = '';
                 
                 const Eye = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
@@ -113,6 +114,67 @@
                         <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
                     </svg>`
 
+                const notificationContainer = document.getElementById('notification-container');
+                const main = document.getElementById('main');
+
+                function notification() {
+                    let notifications = [];
+                    let totalHeight = 0;
+
+                    function updateTransform(isRemoving = false, removeNode = null) {
+                        const transform = `translateY(calc(0px - (var(--notification-margin) * ${notifications.length}) - ${totalHeight}px))`;
+                        if(!isRemoving) {
+                            notifications.forEach(e=>e.style.transform = transform)
+                        } else {
+                            const all_notifications = Array.from(removeNode.parentNode.children);
+                            const notifs_after = all_notifications.slice(all_notifications.indexOf(removeNode))
+
+                            notifs_after.forEach(e=>{
+                                e.style.transitionDuration = '0s';
+                            })
+                            notifications.forEach(e=>e.style.transform = transform)
+                            notificationContainer.clientHeight;
+                            notifs_after.forEach(e=>{
+                                e.style.transitionDuration = '.5s';
+                            })
+                        }
+                    }
+
+                    async function removeElem(elem, elemHeight) {
+                        if(notifications.filter(e=>e===elem).length) {
+                            const hidePosition = notificationContainer.clientHeight - elem.getBoundingClientRect().top + 20;
+                            const transformStr = elem.style.transform
+                            new Animation(new KeyframeEffect(elem, [
+                                {'transform': transformStr},
+                                {'transform': `${transformStr.slice(0, -2)} - 10px))`},
+                                {'transform': `${transformStr.slice(0, -2)} - 10px + ${hidePosition}px))`},
+                            ], { duration: 500, fill: 'forwards' }), document.timeline).play()
+                            await new Promise(s=>setTimeout(s, 500));
+                            notifications = notifications.filter(e=>e!==elem);
+                            totalHeight = Math.max(totalHeight - elemHeight, 0);
+                            updateTransform(true, elem);
+                            elem.remove();
+                        }
+                    }
+
+                    return function showNotification(content, type = 'info', time = 5000) {
+                        const elem = document.createElement('div');
+                        elem.className = `notification ${type} clickable`;
+                        elem.textContent = content;
+                        notificationContainer.appendChild(elem);
+
+                        const height = elem.clientHeight;
+                        totalHeight += height;
+                        notifications.push(elem);
+                        updateTransform();
+
+                        elem.onclick = () => removeElem(elem, height)
+                        setTimeout(()=>removeElem(elem, height), time)
+                    }
+                }
+
+                const showNotification = notification();
+
                 function askLogin() {
 
                     if(Cookies.get('login-account')) return;
@@ -122,11 +184,25 @@
                         const account = evt.target.account.value;
                         const password = evt.target.password.value;
                         
-                        // TODO: ask background to verify
-                        Cookies.set('login-account', account, { expires: 365 } );
+                        fetch(`${BASE_URL}/login`, {
+                            method: 'POST',
+                            body: JSON.stringify({account, password}),
+                            mode: "cors",
+                            headers: {'Content-Type': 'application/json'}
+                        }).then(async res => {
+                            const { result, userID } = await res.json();
+                            console.log(result, userID)
+                            if(result !== 'login-failed') {
+                                if(result === 'login-success') showNotification('登陆成功!', 'success')
+                                else if(result === 'account-created') showNotification('注册成功, 将为您登录', 'success')
+                                // Cookies.set('login-account', userID, { expires: 365 } );
+                            } else {
+                                showNotification('密码不正确!', 'err')
+                            }
+                        })
                     }
 
-                    document.body.innerHTML = `
+                    main.innerHTML = `
                     <form id='login-form'>
                         <span class='description'>请输入账号密码登录，如果账号不存在将会直接创建</span>
                         <input type='text' name='account' placeholder="请输入您的账号" >
@@ -163,6 +239,52 @@
             }
 
             .clickable:hover {cursor: pointer;}
+
+            #notification-container {
+                width: 100vw;
+                height: 100vh;
+                position: fixed;
+                top: 0;
+                left: 0;
+                z-index: 2;
+                pointer-events: none;
+                /* background-image: linear-gradient(to bottom, black 50%, white 50%); */
+
+                --notification-margin: 20px;
+            }
+
+            #notification-container .notification {
+                position: relative;
+                /* top: 50%; */
+                top: 100%;
+                transition-duration: .5s;
+                margin: auto;
+                margin-bottom: var(--notification-margin);
+                width: 25%;
+                height: fit-content;
+                padding: 20px;
+                color: white;
+                z-index: 5;
+                pointer-events: initial;
+                border-radius: 7px;
+            }
+            #notification-container .info { background-color: dodgerblue; }
+            #notification-container .success { background-color: limegreen; }
+
+            #notification-container .err,
+            #notification-container .error { background-color: red; }
+
+            #notification-container .warn,
+            #notification-container .warning { background-color: gold; text-shadow: 1px 1px 2px black; }
+
+            #main {
+                width: 100vw;
+                height: 100vh;
+                position: fixed;
+                top: 0;
+                left: 0;
+                z-index: 1;
+            }
 
             #login-form {
                 --input-width: 25vw;
@@ -221,5 +343,7 @@
         <title>音趴</title>
     </head>
     <body>
+        <div id="notification-container"></div>
+        <div id="main"></div>
     </body>
 </html>
