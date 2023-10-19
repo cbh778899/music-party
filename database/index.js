@@ -35,8 +35,8 @@ exports.openDB = async function (mode = null, init = false) {
         )`);
 
         await run(db, `CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY NOT NULL,
-            name TEXT, type TEXT
+            id INTEGER PRIMARY KEY NOT NULL, user_id INTEGER,
+            name TEXT, type TEXT, filename TEXT, upload_status TEXT
         )`);
 
         await close(db);
