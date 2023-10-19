@@ -15,14 +15,7 @@ function formatSelectQuery(table, select = '*', whereQuery = null) {
     let query = 'SELECT ';
     const params = [];
 
-    if(typeof select === 'object') {
-        query += select.map(e=>{
-            params.push(e)
-            return '?';
-        }).join(', ');
-    } else {
-        query += '*';
-    }
+    query += (typeof select === 'object') ? select.join(', ') : select;
     query += ' FROM ' + table;
     if(whereQuery) query += formatWhereQuery(whereQuery, v=>params.push(v));
 
