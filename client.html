@@ -114,6 +114,31 @@
                         <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
                     </svg>`
 
+                const CaretLeftFill = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-left-fill" viewBox="0 0 16 16">
+                        <path d="m3.86 8.753 5.482 4.796c.646.566 1.658.106 1.658-.753V3.204a1 1 0 0 0-1.659-.753l-5.48 4.796a1 1 0 0 0 0 1.506z"/>
+                    </svg>`
+
+                const CaretRightFill = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-right-fill" viewBox="0 0 16 16">
+                        <path d="m12.14 8.753-5.482 4.796c-.646.566-1.658.106-1.658-.753V3.204a1 1 0 0 1 1.659-.753l5.48 4.796a1 1 0 0 1 0 1.506z"/>
+                    </svg>`
+
+                const PauseFill = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pause-fill" viewBox="0 0 16 16">
+                        <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/>
+                    </svg>`
+
+                const Play = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-play" viewBox="0 0 16 16">
+                        <path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/>
+                    </svg>`
+
+                const List = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-list" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+                    </svg>`
+
                 const notificationContainer = document.getElementById('notification-container');
                 const main = document.getElementById('main');
 
@@ -244,6 +269,89 @@
                     document.getElementById('login-form').onsubmit = submitLogin;
                 }
 
+                function party() {
+
+                    let displaying = {
+                        type: '', elem: null
+                    }
+
+                    function loadHls(bound_elem, type) {
+                        const hls = Hls.isSupported() ?
+                            new Hls() : (function(){throw new Error('HLS Not Supported!')})();
+
+                        hls.attachMedia(bound_elem);
+
+                        return (url)=>{
+                            hls.loadSource(url);
+                            if(displaying.type !== type) {
+                                displaying.elem.style.display = 'none';
+                                displaying.type = type;
+                                displaying.elem = bound_elem;
+                                bound_elem.style.display = 'block';
+                            }
+                        }
+                    }
+
+                    main.innerHTML = `
+                    <div class='party'>
+                        <div id='nav-bar'>
+                            <div class='clickable' id='hamburger-icon'>${List}</div>
+                            <div class='items'>
+                                <div class='item clickable'>用户中心</div>
+                                <div class='item clickable'>播放列表</div>
+                                <div class='item clickable'>上传媒体文件</div>
+                                <div class='item clickable'>管理我的上传</div>
+                                <div class='item clickable'>新建/加入房间</div>
+                                <div class='item clickable' id='logout'>退出登录</div>
+                            </div>
+                        </div>
+                        <div class='media-container'>
+                            <video id='video-component'></video>
+                            <audio id='audio-component'></audio>
+                        </div>
+                        <div class='controllers'>
+                            <div class='controller clickable' id='last' title='上一媒体'>${CaretLeftFill}</div>
+                            <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
+                            <div class='controller clickable' id='next' title='下一媒体'>${CaretRightFill}</div>
+                        </div>
+                    </div>`
+
+                    const video_component = document.getElementById('video-component');
+                    const audio_component = document.getElementById('audio-component');
+
+                    const setVideoHls = loadHls(video_component, 'video');
+                    const setAudioHls = loadHls(audio_component, 'audio');
+
+                    // delete later
+                    document.getElementById('logout').onclick = () => {
+                        Cookies.remove('login-account');
+                        askLogin();
+                        showNotification('登出成功!', 'success')
+                    }
+
+                    const nav_bar = document.getElementById('nav-bar');
+                    document.getElementById('hamburger-icon').onclick = () => {
+                        nav_bar.classList.toggle('expanded-nav-bar')
+                    }
+
+                    const toggle_play_btn = document.getElementById('toggle-play');
+                    toggle_play_btn.onclick = function() {
+                        if(displaying.elem) {
+                            if(displaying.elem.paused) {
+                                displaying.elem.play();
+                                toggle_play_btn.innerHTML = PauseFill;
+                                toggle_play_btn.title = '暂停';
+                            } else {
+                                displaying.elem.pause();
+                                toggle_play_btn.innerHTML = Play;
+                                toggle_play_btn.title = '播放';
+                            }
+                        }
+                    }
+                }
+
+                askLogin();
+            }
         </script>
         <style type="text/css">
             /* global */
@@ -261,6 +369,7 @@
             #main {
                 width: 100vw;
                 height: 100vh;
+                max-height: --webkit-fill-available;
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -278,7 +387,7 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                z-index: 2;
+                z-index: 100;
                 pointer-events: none;
 
                 --notification-margin: 20px;
@@ -386,12 +495,106 @@
             }
 
             /* party */
-            .party #video-component,
-            .party #audio-component {
-                width: 100%;
+            .party {
+                --nav-bar-width: 50px;
+                --nav-bar-item-width: 150px;
+                --nav-bar-left-right-padding: 5px;
+                --media-container-height: 500px;
+                --controllers-height: 30px;
+            }
+            
+            .party #nav-bar {
+                width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-right-padding) * 2));
+                height: 100%;
                 position: absolute;
-                background-color: black;
+                top: 0;
+                left: 0;
+                border-right: 1px solid grey;
+                padding: 50px var(--nav-bar-left-right-padding);
+                padding-bottom: unset;
+                transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
+                transition-duration: .5s;
+                z-index: 5;
+                overflow-y: auto;
+            }
+
+            .party .expanded-nav-bar {
+                transform: unset !important;
+            }
+
+            .party #nav-bar #hamburger-icon {
+                width: 40px;
+                height: 40px;
+                color: grey;
+                position: absolute;
+                right: 5px;
+                top: 5px;
+            }
+
+            .party #nav-bar #hamburger-icon svg {
+                width: 26px;
+                height: 26px;
+                margin: 7px;
+            }
+
+            .party #nav-bar .items {
+                height: calc(100% - 50px);
+                width: fit-content;
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                scrollbar-width: none;
+                overflow-y: auto;
+            }
+            .party #nav-bar .items::-webkit-scrollbar {display: none;}
+            
+
+            .party #nav-bar .items .item {
+                width: var(--nav-bar-item-width);
+                text-align: center;
+                padding: 10px 5px;
+                border-bottom: 1px solid lightgray;
+                margin-bottom: 5px;
+            }
+
+            .party .media-container {
+                display: flex;
+                position: relative;
+                transform: translateX(var(--nav-bar-width));
+                width: calc(100% - var(--nav-bar-width));
+                height: var(--media-container-height);
+                max-height: calc(100vh - var(--controllers-height));
+                left: 0;
+                align-items: center;
+            }
+
+            .party .media-container #video-component,
+            .party .media-container #audio-component {
+                max-height: 100%;
+                max-width: 100%;
+                
+                margin: auto;
                 display: none;
+            }
+
+            .party .controllers {
+                position: relative;
+                width: calc(100% - var(--nav-bar-width));
+                transform: translateX(var(--nav-bar-width));
+                height: var(--controllers-height);
+                text-align: center;
+            }
+
+            .party .controllers .controller {
+                display: inline-block;
+            }
+            .party .controllers .controller:nth-child(2) {
+                margin: 0px 10px;
+            }
+
+            .party .controllers .controller svg {
+                width: 30px;
+                height: 30px;
             }
 
             /* mobile view */
