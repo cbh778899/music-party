@@ -3,6 +3,7 @@ require('dotenv').config();
 // imports
 const fs = require('fs')
 const exec = require('child_process').exec
+const crypto = require('crypto')
 
 // types
 const PROCESS_DIR = 'waiting_process',
@@ -19,6 +20,7 @@ fs.existsSync(`./${PROCESS_DIR}`) || fs.mkdirSync(`./${PROCESS_DIR}`)
 const express = require('express');
 const bodyParser = require('body-parser');
 const { login } = require('./actions/account_actions');
+const { upload, finishUpload, getPlaylistInfo } = require('./actions/playlist_actions');
 const app = express();
 app.use(require('cors')())
 app.use(bodyParser.json())
@@ -52,30 +54,39 @@ router.get('/ask-file/:filename', (req, res)=>{
     res.sendFile(`${__dirname}/test_playlist/${filename}`)
 })
 
-router.post('/upload-file', bodyParser.raw({type: 'application/octet-stream', limit: '10mb'}), (req, res) => {
-    const { filename, isSpecialTrunk, fileType, renameFile } = req.query;
+router.post('/pre-upload', async (req, res) => {
+    const {userID, playListName, suffix, fileType} = req.body;
+    const timeStamp = Date.now();
+    const hash_name = `${crypto.createHash('md5').update(`${userID}${playListName}${timeStamp}`).digest('hex')}.${suffix}`;
+    fs.existsSync(hash_name) && fs.unlinkSync(hash_name);
+    await upload(userID, playListName, fileType, hash_name);
+    res.send(hash_name)
+})
+
+router.post('/upload-file', bodyParser.raw({type: 'application/octet-stream', limit: '10mb'}), async (req, res) => {
+    const { filename, isLastTrunk } = req.query;
     const data = req.body;
     
     const process_file = `./${PROCESS_DIR}/${filename}`
-    isSpecialTrunk === SPECIAL_TRUNK_START && fs.existsSync(process_file) && fs.unlinkSync(process_file);
     fs.appendFileSync(process_file, data)
-    if(isSpecialTrunk === SPECIAL_TRUNK_END) {
-        let playlist_name = renameFile || filename.split('.').slice(0, -1).join('.')
+    if(+ isLastTrunk) {
+        const playlistInfo = await getPlaylistInfo(filename)
+        const playlist_name = filename.split('.').shift()
         const playlist_dir = `./${FILES_DIR}/${playlist_name}`
         fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
-        exec(`ffmpeg -i "${process_file}" ${fileType === 'video' ? '-map 0:v ' : ''}-map 0:a ${fileType === 'video' ? '-c:v libx264 ' : ''}-c:a aac -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${playlist_name}.m3u8"`, (err, stdout, stderr) => {
+        exec(`ffmpeg -i "${process_file}" ${playlistInfo.type === 'video' ? '-map 0:v ' : ''}-map 0:a ${playlistInfo.type === 'video' ? '-c:v libx264 ' : ''}-c:a aac -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${playlist_name}.m3u8"`, (err, stdout, stderr) => {
             if(err) {
-                console.error(`Error ${err}`)
+                throw err;
             } else {
                 // console.log(`stdout ${stdout}`)
                 // console.log(`stderr ${stderr}`)
                 fs.existsSync(process_file) && fs.unlinkSync(process_file);
-                // TODO: insert new filename into db
+                finishUpload(playlistInfo.id).then(()=>{res.send('finished')});
             }
         })
+    } else {
+        res.send('success')
     }
-
-    res.send('success')
 })
 
 app.use('/', router)
