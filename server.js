@@ -4,20 +4,14 @@ require('dotenv').config();
 const fs = require('fs')
 const crypto = require('crypto')
 
-// types
-const PROCESS_DIR = 'waiting_process',
-      FILES_DIR = 'all_files';
-
 // init
 require('./database').openDB(null, true);
-fs.existsSync(`./${FILES_DIR}`) || fs.mkdirSync(`./${FILES_DIR}`)
-fs.existsSync(`./${PROCESS_DIR}`) || fs.mkdirSync(`./${PROCESS_DIR}`)
 
 // express init
 const express = require('express');
 const bodyParser = require('body-parser');
 const { login } = require('./actions/account_actions');
-const { upload, finishUpload, getPlaylistInfo } = require('./actions/playlist_actions');
+const { upload, uploadChunk, removePlayList } = require('./actions/playlist_actions');
 const app = express();
 app.use(require('cors')())
 app.use(bodyParser.json())
@@ -61,18 +55,17 @@ router.post('/pre-upload', async (req, res) => {
 })
 
 router.post('/upload-file', bodyParser.raw({type: 'application/octet-stream', limit: '10mb'}), async (req, res) => {
-    const { playlistID, isLastTrunk } = req.query;
+    const { playlistID, isLastChunk } = req.query;
     const data = req.body;
     
-    const { filename, suffix } = await getPlaylistInfo(+ playlistID);
-    const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
-    fs.appendFileSync(process_file, data)
-    if(+ isLastTrunk) {
-        await finishUpload(playlistID, process_file, FILES_DIR);
-        res.send('finished');
-    } else {
-        res.send('success')
-    }
+    await uploadChunk(playlistID, + isLastChunk, data);
+    res.send(+ isLastChunk ? 'finished' : 'success')
+})
+
+router.delete('/playlist/:id', async (req, res) => {
+    const id = + req.params.id;
+    await removePlayList(id);
+    res.send('ok');
 })
 
 app.use('/', router)
