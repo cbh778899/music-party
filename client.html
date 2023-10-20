@@ -280,18 +280,18 @@
                         }
                     }
 
-                    async function uploadFile(file, rename, updateProgress) {
+                    async function uploadFile(file, rename, progressControl) {
                         let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
                             currentChunkIndex = 0,
                             fileType = file.type.split('/').shift(),
-                            playlistID = -1;
+                            playlistID = -1, 
+                            updateProgress = progressControl(abort);
 
                         async function init() {
                             playlistID = + (await (await fetch('/pre-upload', {
                                 method: 'POST',
                                 headers: {'Content-Type': 'application/json'},
                                 body: JSON.stringify({
-                                    // TODO: generate userid and playlistname
                                     userID: + Cookies.get('login-account'),
                                     playListName: (rename || file.name),
                                     suffix: file.name.split('.').pop(),
@@ -301,18 +301,32 @@
                             cutFileChunk();
                         }
 
+                        function abort() {
+                            if(currentChunkIndex !== -1 && playlistID !== -1) {
+                                currentChunkIndex = -1;
+                                updateProgress('aborted');
+                                fetch(`${BASE_URL}/playlist/${playlistID}`, {
+                                    method: 'DELETE'
+                                })
+                            }
+                        }
+
                         function cutFileChunk() {
+                            if(currentChunkIndex < 0) return;
+
                             const start = currentChunkIndex * FILE_CHUNK_SIZE;
                             const end = Math.min(start + FILE_CHUNK_SIZE, file.size);
                             sendFileChunk(file.slice(start, end));
                         }
 
                         async function sendFileChunk(chunk) {
-                            const isLastTrunk = + (currentChunkIndex === totalChunks - 1)
+                            if(currentChunkIndex < 0) return;
+
+                            const isLastChunk = + (currentChunkIndex === totalChunks - 1)
                             const searchParams = new URLSearchParams({
-                                playlistID, isLastTrunk
+                                playlistID, isLastChunk
                             })
-                            isLastTrunk && updateProgress('waiting-process');
+                            isLastChunk && updateProgress('waiting-process');
 
                             await fetch(`${BASE_URL}/upload-file?${searchParams.toString()}`, {
                                 method: 'POST',
@@ -320,9 +334,10 @@
                                 headers: {'Content-Type': 'application/octet-stream'}
                             })
 
-                            if(isLastTrunk) {
+                            if(isLastChunk) {
+                                currentChunkIndex = -1;
                                 updateProgress('finished')
-                            } else {
+                            } else if(currentChunkIndex >= 0) {
                                 currentChunkIndex ++;
                                 updateProgress(Math.floor((currentChunkIndex / (totalChunks - 1)) * 100))
                                 cutFileChunk();
@@ -399,15 +414,24 @@
                         </div>
                         `
 
-                        const updateProgress = (playlist_name, elem, setFinished) => (progress) => {
+                        const updateProgress = (playlist_name, elem, stats) => (abort) => (progress) => {
+                            if (!stats.abort) stats.abort = abort;
+
                             if(typeof progress === 'string') {
                                 elem.style.backgroundImage = `unset`;
                                 elem.style.backgroundColor = `lightgreen`;
                                 elem.textContent = 
                                     progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...` :
-                                    progress === 'finished' ? `[${playlist_name}] 上传完成!` : '';
+                                    progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
+                                    progress === 'aborted' ? `[${playlist_name}] 上传取消` : '';
                                 
-                                if(progress === 'finished') setFinished && setFinished();
+                                if(progress === 'finished') {
+                                    stats.finished = true;
+                                } else if(progress === 'aborted') {
+                                    elem.style.backgroundColor = `red`;
+                                    elem.style.color = `white`;
+                                    stats.finished = true;
+                                }
                                     
                             } else if(typeof progress === 'number') {
                                 elem.textContent = `[${playlist_name}] 上传中... ${progress}%`;
@@ -436,11 +460,13 @@
 
                                 const displayElemContainer = document.createElement('div');
                                 displayElemContainer.className = 'progress-bar';
+
+                                const defaultName = file.name.split('.').slice(0, -1).join('.')
                                 
                                 const renameInput = document.createElement('input')
                                 renameInput.type = 'text';
-                                renameInput.placeholder = file.name;
-                                renameInput.value = file.name;
+                                renameInput.placeholder = defaultName;
+                                renameInput.value = defaultName;
                                 renameInput.oninput = evt => {
                                     const value = evt.target.value;
                                     selectedFiles[index].rename = value;
@@ -466,12 +492,16 @@
                             }
                         }
 
+                        function cleanUp() {
+                            selectedFiles.length = 0;
+                            closePopup();
+                        }
+
                         uploadBtn.onclick = () => {
                             const finishBtn = document.createElement('button');
                             finishBtn.onclick = () => {
                                 if(!selectedFiles.filter(e=>!e.finished).length) {
-                                    selectedFiles.length = 0;
-                                    closePopup();
+                                    cleanUp()
                                 } else {
                                     showNotification('还有未完成上传的文件!', 'err');
                                 }
@@ -479,6 +509,12 @@
                             finishBtn.textContent = '完成';
                             uploadBtn.insertAdjacentElement('beforebegin', finishBtn)
                             uploadBtn.remove();
+                            cancelBtn.onclick = () => {
+                                selectedFiles.forEach(e=>{
+                                    e && e.abort && e.abort();
+                                })
+                                cancelBtn.onclick = cleanUp;
+                            }
 
                             selectedFiles.forEach(e=>{
                                 if(!e) return;
@@ -489,14 +525,11 @@
                                 progress_text.className = 'progress-text';
                                 progress_text.textContent = `[${rename || file.name}] 等待上传中...`;
                                 displayElemContainer.appendChild(progress_text)
-                                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, ()=>{e.finished = true;}));
+                                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, e));
                             })
                         }
 
-                        cancelBtn.onclick = () => {
-                            selectedFiles.length = 0;
-                            closePopup();
-                        }
+                        cancelBtn.onclick = cleanUp;
                     }
 
                     document.getElementById('logout').onclick = () => {
