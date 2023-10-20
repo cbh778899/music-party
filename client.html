@@ -482,11 +482,10 @@
 
                                 displayElemContainer.appendChild(renameInput);
                                 displayElemContainer.appendChild(removeFile);
-                                // uploadMediaContainer.appendChild(displayElemContainer);
                                 uploadBtn.parentElement.insertAdjacentElement('beforebegin', displayElemContainer)
 
                                 selectedFiles[index] = {
-                                    rename: '', finished: false,
+                                    rename: defaultName, finished: false,
                                     file, displayElemContainer
                                 }
                             }
@@ -510,10 +509,13 @@
                             uploadBtn.insertAdjacentElement('beforebegin', finishBtn)
                             uploadBtn.remove();
                             cancelBtn.onclick = () => {
-                                selectedFiles.forEach(e=>{
-                                    e && e.abort && e.abort();
-                                })
-                                cancelBtn.onclick = cleanUp;
+                                const isAllFinished = !selectedFiles.filter(e=>!e.finished).length
+                                if(!isAllFinished) {
+                                    selectedFiles.forEach(e=>{
+                                        e && e.abort && e.abort();
+                                    })
+                                    cancelBtn.onclick = cleanUp;
+                                } else cleanUp();
                             }
 
                             selectedFiles.forEach(e=>{
