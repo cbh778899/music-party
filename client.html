@@ -2,74 +2,59 @@
 
 <html>
     <head>
-        <!-- <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script> -->
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
         <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+        <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"> -->
         <script type="text/javascript">
-
                 // set chunk size to 1MB
-                const FILE_CHUNK_SIZE = 1024 * 1024
-                const BASE_URL = ''
+                // const FILE_CHUNK_SIZE = 1024 * 1024
+                // const BASE_URL = ''
 
-                async function getPlaylist() {
-                    const playlists = await (await fetch(`${BASE_URL}/playlists`, {
-                        headers: {'Content-Type': 'application/json'}
-                    })).json()
+                // async function getPlaylist() {
+                //     const playlists = await (await fetch(`${BASE_URL}/playlists`, {
+                //         headers: {'Content-Type': 'application/json'}
+                //     })).json()
 
                     
-                    if(playlists && playlists.length) {
-                        const hlsVideo = loadHLSVideo();
-                        playlists.forEach(playlist=>{
-                            const select_playlist = document.createElement('div')
-                            select_playlist.textContent = playlist
-                            select_playlist.style.display = 'block';
-                            select_playlist.onclick = () => hlsVideo(`${BASE_URL}/retrieve-playlist/${playlist}/${playlist}.m3u8`)
-                            document.body.appendChild(select_playlist)
-                        })
-                    }
-                }
+                //     if(playlists && playlists.length) {
+                //         const hlsVideo = loadHLSVideo();
+                //         playlists.forEach(playlist=>{
+                //             const select_playlist = document.createElement('div')
+                //             select_playlist.textContent = playlist
+                //             select_playlist.style.display = 'block';
+                //             select_playlist.onclick = () => hlsVideo(`${BASE_URL}/retrieve-playlist/${playlist}/${playlist}.m3u8`)
+                //             document.body.appendChild(select_playlist)
+                //         })
+                //     }
+                // }
 
-                function loadHLSVideo(url) {
-                    const video_comp = document.getElementById('video')
-                    let hls;
+                // function loadHLSVideo(url) {
+                //     const video_comp = document.getElementById('video')
+                //     let hls;
 
-                    if(Hls.isSupported()) {
-                        hls = new Hls();
-                        hls.attachMedia(video_comp);
-                    } else {
-                        throw new Error('HLS not supported!')
-                    }
+                //     if(Hls.isSupported()) {
+                //         hls = new Hls();
+                //         hls.attachMedia(video_comp);
+                //     } else {
+                //         throw new Error('HLS not supported!')
+                //     }
 
-                    return (url)=>{
-                        hls.loadSource(url);
-                        video_comp.play();
-                    }
-                }
-
-                function submitFiles(evt) {
-                    evt.preventDefault();
-                    const files = evt.target.files.files
-                    for(let i = 0; i < files.length; i++) {
-                        const file = files[i]
-                        const progressBar = document.createElement('div')
-                        document.body.appendChild(progressBar)
-                        uploadFile(file, progressBar)
-                    }
-                }
-
-                function selectFiles(evt) {
-                    const files = evt.target.files;
-                    for(let i = 0; i < files.length; i++) {
-                        const file = files[i]
-                    }
-                }
+                //     return (url)=>{
+                //         hls.loadSource(url);
+                //         video_comp.play();
+                //     }
+                // }
         </script>
         <script type="text/javascript">
             window.onload = function() {
             // function test() {
                 'use strict';
+
+                // SECTION: constants
                 const BASE_URL = '';
                 const FILE_CHUNK_SIZE = 1024 * 1024;
                 
+                // SECTION: svg
                 const Eye = `
                     <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
@@ -113,10 +98,19 @@
                         <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
                     </svg>`;
 
+                const Shuffle = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shuffle" viewBox="0 0 16 16">
+                        <path fill-rule="evenodd" d="M0 3.5A.5.5 0 0 1 .5 3H1c2.202 0 3.827 1.24 4.874 2.418.49.552.865 1.102 1.126 1.532.26-.43.636-.98 1.126-1.532C9.173 4.24 10.798 3 13 3v1c-1.798 0-3.173 1.01-4.126 2.082A9.624 9.624 0 0 0 7.556 8a9.624 9.624 0 0 0 1.317 1.918C9.828 10.99 11.204 12 13 12v1c-2.202 0-3.827-1.24-4.874-2.418A10.595 10.595 0 0 1 7 9.05c-.26.43-.636.98-1.126 1.532C4.827 11.76 3.202 13 1 13H.5a.5.5 0 0 1 0-1H1c1.798 0 3.173-1.01 4.126-2.082A9.624 9.624 0 0 0 6.444 8a9.624 9.624 0 0 0-1.317-1.918C4.172 5.01 2.796 4 1 4H.5a.5.5 0 0 1-.5-.5z"/>
+                        <path d="M13 5.466V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192zm0 9v-3.932a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192z"/>
+                    </svg>`
+
+                // SECTION: components
                 const notificationContainer = document.getElementById('notification-container');
+                const popupContainer = document.getElementById('popup-container');
                 const popupWindow = document.getElementById('popup-window');
                 const main = document.getElementById('main');
 
+                // SECTION: notification
                 function notification() {
                     let notifications = [];
                     let totalHeight = 0;
@@ -172,21 +166,40 @@
                         setTimeout(()=>removeElem(elem, height), time)
                     }
                 }
+                const showNotification = notification();
+
+                // SECTION: popup
+                let popupWindowVisibility = false;
 
                 async function showPopup(buildPage) {
                     if(!buildPage) {
+                        popupContainer.style.backgroundColor = 'unset';
+                        popupContainer.style.pointerEvents = 'none';
                         popupWindow.style.transform = 'scale(0)';
                         await new Promise(s=>setTimeout(s, 300));
                         popupWindow.innerHTML = '';
+                        popupWindowVisibility = false;
                     } else {
+                        popupContainer.style.backgroundColor = 'rgba(0,0,0,.7)';
+                        popupContainer.style.pointerEvents = 'initial';
                         buildPage();
                         popupWindow.style.transform = 'scale(1)';
+                        popupWindowVisibility = true;
                     }
                 }
-
                 const closePopup = () => showPopup(null);
+                popupContainer.onclick = evt => {
+                    if(evt.target === popupContainer) {
+                        closePopup();
+                    }
+                }
                 
-                const showNotification = notification();
+                // SECTION: utils
+                function shuffle(arr) {
+                    return arr.sort(()=> .5 - Math.random())
+                }
+
+                // SECTION: pages
 
                 function askLogin() {
 
@@ -263,20 +276,33 @@
                         type: '', elem: null
                     }
 
+                    const playStates = {
+                        playlist: {},
+                        playing: 0, order: [],
+                        how: 'loop', random_order: []
+                    }
+
+                    const userID = + Cookies.get('login-account')
+
                     function loadHls(bound_elem, type) {
                         const hls = Hls.isSupported() ?
                             new Hls() : (function(){throw new Error('HLS Not Supported!')})();
 
                         hls.attachMedia(bound_elem);
 
-                        return (url)=>{
+                        return (url, startPlay = true)=>{
                             hls.loadSource(url);
                             if(displaying.type !== type) {
-                                displaying.elem.style.display = 'none';
-                                displaying.type = type;
+                                if(displaying.elem) {
+                                    displaying.elem.style.display = 'none';
+                                    displaying.elem.pause();
+                                    displaying.type = type;
+                                }
                                 displaying.elem = bound_elem;
                                 bound_elem.style.display = 'block';
                             }
+                            startPlay && bound_elem.play();
+                            togglePlay(true, true)
                         }
                     }
 
@@ -292,7 +318,7 @@
                                 method: 'POST',
                                 headers: {'Content-Type': 'application/json'},
                                 body: JSON.stringify({
-                                    userID: + Cookies.get('login-account'),
+                                    userID,
                                     playListName: (rename || file.name),
                                     suffix: file.name.split('.').pop(),
                                     fileType
@@ -353,7 +379,7 @@
                             <div class='clickable' id='hamburger-icon'>${List}</div>
                             <div class='items'>
                                 <div class='item clickable'>用户中心</div>
-                                <div class='item clickable'>播放列表</div>
+                                <div class='item clickable' id='get-playlist'>播放列表</div>
                                 <div class='item clickable' id='upload-media'>上传媒体文件</div>
                                 <div class='item clickable'>管理我的上传</div>
                                 <div class='item clickable'>新建/加入房间</div>
@@ -361,8 +387,8 @@
                             </div>
                         </div>
                         <div class='media-container'>
-                            <video id='video-component'></video>
-                            <audio id='audio-component'></audio>
+                            <video id='video-component' controls></video>
+                            <audio id='audio-component' controls></audio>
                         </div>
                         <div class='controllers'>
                             <div class='controller clickable' id='last' title='上一媒体'>${CaretLeftFill}</div>
@@ -374,24 +400,73 @@
                     const video_component = document.getElementById('video-component');
                     const audio_component = document.getElementById('audio-component');
 
-                    // const setVideoHls = loadHls(video_component, 'video');
-                    // const setAudioHls = loadHls(audio_component, 'audio');
+                    const setVideoHls = loadHls(video_component, 'video');
+                    const setAudioHls = loadHls(audio_component, 'audio');
 
                     // controllers
-                    const toggle_play_btn = document.getElementById('toggle-play');
-                    toggle_play_btn.onclick = function() {
+                    function togglePlay(iconOnly, status = 'dynamic') {
+                        iconOnly = typeof iconOnly === "boolean" ? iconOnly : false
                         if(displaying.elem) {
-                            if(displaying.elem.paused) {
-                                displaying.elem.play();
-                                toggle_play_btn.innerHTML = PauseFill;
-                                toggle_play_btn.title = '暂停';
-                            } else {
-                                displaying.elem.pause();
+                            const isPlaying = 
+                                status === 'dynamic' ? 
+                                !displaying.elem.paused : !status;
+
+                            if(isPlaying) {
+                                !iconOnly && displaying.elem.pause();
                                 toggle_play_btn.innerHTML = Play;
                                 toggle_play_btn.title = '播放';
+                            } else {
+                                !iconOnly && displaying.elem.play();
+                                toggle_play_btn.innerHTML = PauseFill;
+                                toggle_play_btn.title = '暂停';
                             }
                         }
                     }
+
+                    function playMedia() {
+                        const media = playStates.playlist[playStates.playing]
+                        media.type === 'audio' ?
+                            setAudioHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`) :
+                            setVideoHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`)
+                    }
+
+                    function playNext() {
+                        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+                        const index = followOrder.indexOf(playStates.playing);
+                        // if is last
+                        if(index === followOrder.length - 1) {
+                            switch(playStates.how) {
+                                case 'playlist': return;
+                                case 'random':
+                                    playStates.random_order = shuffle(playStates.order);
+                                    playStates.playing = playStates.random_order[0];
+                                    break;
+                                case 'loop':
+                                default:
+                                    playStates.playing = playStates.order[0];
+                                    break;
+                            }
+                        } else playStates.playing = playStates.order[index + 1]
+                        playMedia();
+                    }
+
+                    function playLast() {
+                        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+                        const index = followOrder.indexOf(playStates.playing);
+                        if(index === 0) {
+                            if(playStates.how === 'playlist') return;
+                            else playStates.playing = followOrder.slice(-1)
+                        } else playStates.playing = followOrder[index - 1];
+                        playMedia();
+                    }
+
+                    const toggle_play_btn = document.getElementById('toggle-play')
+
+                    video_component.onended = playNext;
+                    audio_component.onended = playNext;
+                    toggle_play_btn.onclick = togglePlay;
+                    document.getElementById('last').onclick = playLast
+                    document.getElementById('next').onclick = playNext
 
                     // expand nav bar
                     const nav_bar = document.getElementById('nav-bar');
@@ -417,13 +492,21 @@
                         const updateProgress = (playlist_name, elem, stats) => (abort) => (progress) => {
                             if (!stats.abort) stats.abort = abort;
 
+                            if(!popupWindowVisibility) {
+                                if(typeof progress === 'number') return;
+
+                                if(progress === 'finished') showNotification(`[${playlist_name}] 上传完成!`, 'success');
+                                else if(progress === 'aborted') showNotification(`[${playlist_name}] 上传中断!`, 'error');
+                                return;
+                            }
+
                             if(typeof progress === 'string') {
                                 elem.style.backgroundImage = `unset`;
                                 elem.style.backgroundColor = `lightgreen`;
                                 elem.textContent = 
                                     progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...` :
                                     progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
-                                    progress === 'aborted' ? `[${playlist_name}] 上传取消` : '';
+                                    progress === 'aborted' ? `[${playlist_name}] 上传中断!` : '';
                                 
                                 if(progress === 'finished') {
                                     stats.finished = true;
@@ -445,7 +528,8 @@
 
                         const selectedFiles = []
 
-                        document.getElementById('files-input').onchange = evt => {
+                        const filesInput = document.getElementById('files-input')
+                        filesInput.onchange = evt => {
                             const files = evt.target.files;
                             const all_files_index = selectedFiles.length
 
@@ -497,6 +581,7 @@
                         }
 
                         uploadBtn.onclick = () => {
+                            filesInput.disabled = true;
                             const finishBtn = document.createElement('button');
                             finishBtn.onclick = () => {
                                 if(!selectedFiles.filter(e=>!e.finished).length) {
@@ -534,6 +619,46 @@
                         cancelBtn.onclick = cleanUp;
                     }
 
+                    async function getPlaylist() {
+                        popupWindow.innerHTML = `
+                        <div id='playlist-main'>
+                            <div id='loading' class='info'>正在加载播放列表</div>
+                        </div>
+                        `
+
+                        const playlist_main = document.getElementById('playlist-main');
+                        
+                        const user_playlists = await (await fetch(`${BASE_URL}/playlists/${userID}`)).json()
+                        document.getElementById('loading').remove();
+                        if(user_playlists.length) {
+                            for(const media of user_playlists) {
+                                playStates.playlist[media.id] = media;
+                                if(! (media.id in playStates.order)) playStates.order.push(media.id);
+                            }
+                        } 
+                        
+                        if(playStates.order.length) {
+                            playStates.order.forEach(id=>{
+                                const media = playStates.playlist[id];
+
+                                const playBtn = document.createElement('div');
+                                playBtn.className = 'media clickable'
+                                media.id === playStates.playing && playBtn.classList.add('playing')
+                                playBtn.textContent = media.name;
+                                playBtn.onclick = () => {
+                                    const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
+                                    last_playing && last_playing.classList.remove('playing')
+                                    playBtn.classList.add('playing')
+                                    playStates.playing = media.id;
+                                    playMedia();
+                                }
+                                playlist_main.appendChild(playBtn);
+                            })
+                        } else {
+                            playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
+                        }
+                    }
+
                     document.getElementById('logout').onclick = () => {
                         Cookies.remove('login-account');
                         closePopup();
@@ -541,8 +666,10 @@
                         showNotification('登出成功!', 'success')
                     }
                     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
+                    document.getElementById('get-playlist').onclick = () => showPopup(getPlaylist)
                 }
 
+                // SECTION: start
                 askLogin();
             }
         </script>
@@ -622,6 +749,7 @@
             /* popup */
             #popup-container {
                 z-index: 50;
+                transition-duration: .3s;
             }
             #popup-container #popup-window {
                 position: absolute;
@@ -809,9 +937,11 @@
 
             .party .controllers .controller {
                 display: inline-block;
-            }
-            .party .controllers .controller:nth-child(2) {
                 margin: 0px 10px;
+            }
+            .party .controllers .controller:first-child,
+            .party .controllers .controller:last-child {
+                margin: unset;
             }
 
             .party .controllers .controller svg {
@@ -928,6 +1058,31 @@
             }
             #upload-media-container .btn-container button:last-child {
                 margin-right: unset;
+            }
+            
+            #playlist-main {
+                --media-height: 50px;
+                --focus-color: #ededed;
+            }
+
+            #playlist-main .media {
+                width: 100%;
+                height: var(--media-height);
+                line-height: var(--media-height);
+                padding: 0px 15px;
+                border-radius: 5px;
+            }
+
+            #playlist-main .media:hover {
+                background-color: var(--focus-color);
+            }
+
+            #playlist-main .playing {
+                background-color: var(--focus-color);
+                color: red;
+            }
+            #playlist-main .playing:hover {
+                background-color: #e0e0e0;
             }
 
             /* mobile view */
