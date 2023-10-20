@@ -36,7 +36,7 @@ exports.openDB = async function (mode = null, init = false) {
 
         await run(db, `CREATE TABLE IF NOT EXISTS playlists (
             id INTEGER PRIMARY KEY NOT NULL, user_id INTEGER,
-            name TEXT, type TEXT, filename TEXT, upload_status TEXT
+            name TEXT, type TEXT, filename TEXT, suffix TEXT, upload_status TEXT
         )`);
 
         await close(db);
@@ -47,12 +47,20 @@ exports.openDB = async function (mode = null, init = false) {
 
 exports.getAll = async function (table, select = '*', where = null) {
     const { query, params } = formatSelectQuery(table, select, where);
-    return await all(await exports.openDB(OPEN_READONLY), query, params);
+    const db = await exports.openDB(OPEN_READONLY);
+    const allResult = await all(db, query, params);
+    await close(db);
+    return allResult;
 }
 
 exports.getOne = async function (table, select = '*', where = null) {
     const { query, params } = formatSelectQuery(table, select, where);
-    return await get(await exports.openDB(OPEN_READONLY), query, params);
+    const db = await exports.openDB(OPEN_READONLY);
+    const getResult = await get(db, query, params);
+    await close(db);
+    if(typeof select === 'string' && select !== '*') {
+        return getResult[select];
+    } return getResult;
 }
 
 exports.insert = async function (table, insertQuery) {
