@@ -43,7 +43,8 @@ exports.upload = async function(userID, name, type, filename, suffix) {
 
 exports.uploadChunk = async function(playlistID, isLastChunk, data) {
     try {
-        const { filename, suffix } = await getPlaylistInfo(+ playlistID);
+        const { filename, suffix, upload_status } = await getPlaylistInfo(+ playlistID);
+        if(upload_status === 'finished') return false;
         const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
         fs.appendFileSync(process_file, data)
         if(+ isLastChunk) {
