@@ -4,7 +4,7 @@
     <head>
         <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
         <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
-        <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"> -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <script type="text/javascript">
                 // set chunk size to 1MB
                 // const FILE_CHUNK_SIZE = 1024 * 1024
@@ -54,55 +54,22 @@
                 const BASE_URL = '';
                 const FILE_CHUNK_SIZE = 1024 * 1024;
                 
-                // SECTION: svg
-                const Eye = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
-                        <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
-                    </svg>`
+                // SECTION: icon
+                const formatIcon = className => `<i class='bi bi-${className}'></i>`;
 
-                const EyeSlash = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A5.944 5.944 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/>
-                        <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/>
-                        <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
-                    </svg>`
-
-                const CaretLeftFill = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-left-fill" viewBox="0 0 16 16">
-                        <path d="m3.86 8.753 5.482 4.796c.646.566 1.658.106 1.658-.753V3.204a1 1 0 0 0-1.659-.753l-5.48 4.796a1 1 0 0 0 0 1.506z"/>
-                    </svg>`
-
-                const CaretRightFill = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-caret-right-fill" viewBox="0 0 16 16">
-                        <path d="m12.14 8.753-5.482 4.796c-.646.566-1.658.106-1.658-.753V3.204a1 1 0 0 1 1.659-.753l5.48 4.796a1 1 0 0 1 0 1.506z"/>
-                    </svg>`
-
-                const PauseFill = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pause-fill" viewBox="0 0 16 16">
-                        <path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/>
-                    </svg>`
-
-                const Play = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-play" viewBox="0 0 16 16">
-                        <path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/>
-                    </svg>`
-
-                const List = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-list" viewBox="0 0 16 16">
-                        <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
-                    </svg>`
-
-                const XLg = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-lg" viewBox="0 0 16 16">
-                        <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
-                    </svg>`;
-
-                const Shuffle = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-shuffle" viewBox="0 0 16 16">
-                        <path fill-rule="evenodd" d="M0 3.5A.5.5 0 0 1 .5 3H1c2.202 0 3.827 1.24 4.874 2.418.49.552.865 1.102 1.126 1.532.26-.43.636-.98 1.126-1.532C9.173 4.24 10.798 3 13 3v1c-1.798 0-3.173 1.01-4.126 2.082A9.624 9.624 0 0 0 7.556 8a9.624 9.624 0 0 0 1.317 1.918C9.828 10.99 11.204 12 13 12v1c-2.202 0-3.827-1.24-4.874-2.418A10.595 10.595 0 0 1 7 9.05c-.26.43-.636.98-1.126 1.532C4.827 11.76 3.202 13 1 13H.5a.5.5 0 0 1 0-1H1c1.798 0 3.173-1.01 4.126-2.082A9.624 9.624 0 0 0 6.444 8a9.624 9.624 0 0 0-1.317-1.918C4.172 5.01 2.796 4 1 4H.5a.5.5 0 0 1-.5-.5z"/>
-                        <path d="M13 5.466V1.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192zm0 9v-3.932a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384l-2.36 1.966a.25.25 0 0 1-.41-.192z"/>
-                    </svg>`
+                const Eye = formatIcon('eye');
+                const EyeSlash = formatIcon('eye-slash');
+                const CaretLeftFill = formatIcon('caret-left-fill');
+                const CaretRightFill = formatIcon(`caret-right-fill`);
+                const PauseFill = formatIcon('pause-fill');
+                const Play = formatIcon('play');
+                const List = formatIcon('list');
+                const XLg = formatIcon('x-lg');
+                const Shuffle = formatIcon('shuffle');
+                const MusicNoteList = formatIcon('music-note-list');
+                const Repeat = formatIcon('repeat');
+                const RepeatOne = formatIcon('repeat-1');
+                const ListUl = formatIcon('list-ul');
 
                 // SECTION: components
                 const notificationContainer = document.getElementById('notification-container');
@@ -196,11 +163,10 @@
                 
                 // SECTION: utils
                 function shuffle(arr) {
-                    return arr.sort(()=> .5 - Math.random())
+                    return [...arr].sort(()=> .5 - Math.random())
                 }
 
                 // SECTION: pages
-
                 function askLogin() {
 
                     if(Cookies.get('login-account')) return party();
@@ -271,6 +237,8 @@
                 }
 
                 function party() {
+
+                    const PLAY_WAYS = ['loop', 'single', 'random', 'playlist']
 
                     let displaying = {
                         type: '', elem: null
@@ -391,9 +359,11 @@
                             <audio id='audio-component' controls></audio>
                         </div>
                         <div class='controllers'>
+                            <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
                             <div class='controller clickable' id='last' title='上一媒体'>${CaretLeftFill}</div>
                             <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
                             <div class='controller clickable' id='next' title='下一媒体'>${CaretRightFill}</div>
+                            <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
                         </div>
                     </div>`
 
@@ -420,6 +390,8 @@
                                 toggle_play_btn.innerHTML = PauseFill;
                                 toggle_play_btn.title = '暂停';
                             }
+                        } else if(playStates.order.length && playStates.playing === 0) {
+                            playNext();
                         }
                     }
 
@@ -431,10 +403,14 @@
                     }
 
                     function playNext() {
+                        if(!playStates.order.length) return;
+                        if(playStates.how === 'single') {
+                            playMedia(); return;
+                        }
                         const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
                         const index = followOrder.indexOf(playStates.playing);
                         // if is last
-                        if(index === followOrder.length - 1) {
+                        if(index >= followOrder.length - 1) {
                             switch(playStates.how) {
                                 case 'playlist': return;
                                 case 'random':
@@ -446,27 +422,48 @@
                                     playStates.playing = playStates.order[0];
                                     break;
                             }
-                        } else playStates.playing = playStates.order[index + 1]
+                        } else playStates.playing = followOrder[index + 1]
                         playMedia();
                     }
 
                     function playLast() {
+                        if(!playStates.order.length) return;
+                        if(playStates.how === 'single') {
+                            playMedia(); return;
+                        }
                         const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
                         const index = followOrder.indexOf(playStates.playing);
-                        if(index === 0) {
+                        // if is first
+                        if(index <= 0) {
                             if(playStates.how === 'playlist') return;
-                            else playStates.playing = followOrder.slice(-1)
+                            else playStates.playing = followOrder.slice(-1)[0]
                         } else playStates.playing = followOrder[index - 1];
                         playMedia();
                     }
 
                     const toggle_play_btn = document.getElementById('toggle-play')
+                    const how_to_play = document.getElementById('how-to-play')
 
+                    // button listeners
                     video_component.onended = playNext;
                     audio_component.onended = playNext;
                     toggle_play_btn.onclick = togglePlay;
                     document.getElementById('last').onclick = playLast
                     document.getElementById('next').onclick = playNext
+                    document.getElementById('show-playlist-icon').onclick = () => showPopup(getPlaylist)
+                    how_to_play.onclick = function() {
+                        if(!playStates.order.length) return;
+                        const idx = PLAY_WAYS.indexOf(playStates.how)
+                        playStates.how = PLAY_WAYS[idx === PLAY_WAYS.length - 1 ? 0 : idx + 1]
+                        how_to_play.innerHTML = 
+                            playStates.how  === 'playlist' ? ListUl :
+                            playStates.how  === 'single' ? RepeatOne : 
+                            playStates.how  === 'random' ? Shuffle : Repeat
+                        
+                        if(playStates.how === 'random') {
+                            playStates.random_order = shuffle(playStates.order)
+                        }
+                    }
 
                     // expand nav bar
                     const nav_bar = document.getElementById('nav-bar');
@@ -633,7 +630,7 @@
                         if(user_playlists.length) {
                             for(const media of user_playlists) {
                                 playStates.playlist[media.id] = media;
-                                if(! (media.id in playStates.order)) playStates.order.push(media.id);
+                                playStates.order.includes(media.id) || playStates.order.push(media.id);
                             }
                         } 
                         
@@ -805,7 +802,7 @@
                 padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
             }
 
-            #login-form #show-password svg {
+            #login-form #show-password i {
                 display: block;
             }
             
@@ -881,9 +878,8 @@
                 top: 5px;
             }
 
-            .party #nav-bar #hamburger-icon svg {
-                width: 26px;
-                height: 26px;
+            .party #nav-bar #hamburger-icon i {
+                font-size: 26px;
                 margin: 7px;
             }
 
@@ -908,6 +904,7 @@
             }
 
             .party .media-container {
+                margin-top: 10px;
                 display: flex;
                 position: relative;
                 transform: translateX(var(--nav-bar-width));
@@ -928,25 +925,33 @@
             }
 
             .party .controllers {
+                margin-top: 10px;
                 position: relative;
                 width: calc(100% - var(--nav-bar-width));
                 transform: translateX(var(--nav-bar-width));
                 height: var(--controllers-height);
                 text-align: center;
+                display: flex;
+                align-items: center;
             }
 
             .party .controllers .controller {
                 display: inline-block;
-                margin: 0px 10px;
+                margin: 0px 5px;
             }
-            .party .controllers .controller:first-child,
+            .party .controllers .controller:first-child {
+                margin-left: auto;
+            }
             .party .controllers .controller:last-child {
-                margin: unset;
+                margin-right: auto;
             }
 
-            .party .controllers .controller svg {
-                width: 30px;
-                height: 30px;
+            .party .controllers .controller i {
+                font-size: var(--controllers-height);
+                line-height: var(--controllers-height);
+            }
+            .party .controllers .controller.sub-icon i {
+                font-size: calc(var(--controllers-height) - 10px);
             }
 
             /* popup windows */
@@ -1029,7 +1034,7 @@
                 display: flex;
             }
 
-            #upload-media-container .progress-bar .remove-file svg {
+            #upload-media-container .progress-bar .remove-file i {
                 margin: auto;
             }
 
