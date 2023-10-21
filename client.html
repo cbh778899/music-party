@@ -46,6 +46,68 @@
                 // }
         </script>
         <script type="text/javascript">
+            // notification element
+            function notification(notificationContainer = null) {
+                let notifications = [];
+                let totalHeight = 0;
+
+                if(!notificationContainer) {
+                    notificationContainer = document.createElement('div');
+                    notificationContainer.id = 'notification-container';
+                    document.body.appendChild(notificationContainer);
+                }
+
+                function updateTransform(isRemoving = false, removeNode = null) {
+                    const transform = `translateY(calc(0px - (var(--notification-margin) * ${notifications.length}) - ${totalHeight}px))`;
+                    if(!isRemoving) {
+                        notifications.forEach(e=>e.style.transform = transform)
+                    } else {
+                        const all_notifications = Array.from(removeNode.parentNode.children);
+                        const notifs_after = all_notifications.slice(all_notifications.indexOf(removeNode))
+
+                        notifs_after.forEach(e=>{
+                            e.style.transitionDuration = '0s';
+                        })
+                        notifications.forEach(e=>e.style.transform = transform)
+                        notificationContainer.clientHeight;
+                        notifs_after.forEach(e=>{
+                            e.style.transitionDuration = '.5s';
+                        })
+                    }
+                }
+
+                async function removeElem(elem, elemHeight) {
+                    if(notifications.filter(e=>e===elem).length) {
+                        const hidePosition = notificationContainer.clientHeight - elem.getBoundingClientRect().top + 20;
+                        const transformStr = elem.style.transform
+                        new Animation(new KeyframeEffect(elem, [
+                            {'transform': transformStr},
+                            {'transform': `${transformStr.slice(0, -2)} - 10px))`},
+                            {'transform': `${transformStr.slice(0, -2)} - 10px + ${hidePosition}px))`},
+                        ], { duration: 500, fill: 'forwards' }), document.timeline).play()
+                        await new Promise(s=>setTimeout(s, 500));
+                        notifications = notifications.filter(e=>e!==elem);
+                        totalHeight = Math.max(totalHeight - elemHeight, 0);
+                        updateTransform(true, elem);
+                        elem.remove();
+                    }
+                }
+
+                return function showNotification(content, type = 'info', time = 5000) {
+                    const elem = document.createElement('div');
+                    elem.className = `notification ${type} clickable`;
+                    elem.textContent = content;
+                    notificationContainer.appendChild(elem);
+
+                    const height = elem.clientHeight;
+                    totalHeight += height;
+                    notifications.push(elem);
+                    updateTransform();
+
+                    elem.onclick = () => removeElem(elem, height)
+                    setTimeout(()=>removeElem(elem, height), time)
+                }
+            }
             window.onload = function() {
             // function test() {
                 'use strict';
@@ -53,6 +115,7 @@
                 // SECTION: constants
                 const BASE_URL = '';
                 const FILE_CHUNK_SIZE = 1024 * 1024;
+                let logged_in = false;
                 
                 // SECTION: icon
                 const formatIcon = className => `<i class='bi bi-${className}'></i>`;
@@ -78,62 +141,7 @@
                 const main = document.getElementById('main');
 
                 // SECTION: notification
-                function notification() {
-                    let notifications = [];
-                    let totalHeight = 0;
-
-                    function updateTransform(isRemoving = false, removeNode = null) {
-                        const transform = `translateY(calc(0px - (var(--notification-margin) * ${notifications.length}) - ${totalHeight}px))`;
-                        if(!isRemoving) {
-                            notifications.forEach(e=>e.style.transform = transform)
-                        } else {
-                            const all_notifications = Array.from(removeNode.parentNode.children);
-                            const notifs_after = all_notifications.slice(all_notifications.indexOf(removeNode))
-
-                            notifs_after.forEach(e=>{
-                                e.style.transitionDuration = '0s';
-                            })
-                            notifications.forEach(e=>e.style.transform = transform)
-                            notificationContainer.clientHeight;
-                            notifs_after.forEach(e=>{
-                                e.style.transitionDuration = '.5s';
-                            })
-                        }
-                    }
-
-                    async function removeElem(elem, elemHeight) {
-                        if(notifications.filter(e=>e===elem).length) {
-                            const hidePosition = notificationContainer.clientHeight - elem.getBoundingClientRect().top + 20;
-                            const transformStr = elem.style.transform
-                            new Animation(new KeyframeEffect(elem, [
-                                {'transform': transformStr},
-                                {'transform': `${transformStr.slice(0, -2)} - 10px))`},
-                                {'transform': `${transformStr.slice(0, -2)} - 10px + ${hidePosition}px))`},
-                            ], { duration: 500, fill: 'forwards' }), document.timeline).play()
-                            await new Promise(s=>setTimeout(s, 500));
-                            notifications = notifications.filter(e=>e!==elem);
-                            totalHeight = Math.max(totalHeight - elemHeight, 0);
-                            updateTransform(true, elem);
-                            elem.remove();
-                        }
-                    }
-
-                    return function showNotification(content, type = 'info', time = 5000) {
-                        const elem = document.createElement('div');
-                        elem.className = `notification ${type} clickable`;
-                        elem.textContent = content;
-                        notificationContainer.appendChild(elem);
-
-                        const height = elem.clientHeight;
-                        totalHeight += height;
-                        notifications.push(elem);
-                        updateTransform();
-
-                        elem.onclick = () => removeElem(elem, height)
-                        setTimeout(()=>removeElem(elem, height), time)
-                    }
-                }
-                const showNotification = notification();
+                const showNotification = notification(notificationContainer);
 
                 // SECTION: popup
                 let popupWindowVisibility = false;
@@ -169,7 +177,11 @@
                 // SECTION: pages
                 function askLogin() {
 
-                    if(Cookies.get('login-account')) return party();
+                    if(Cookies.get('login-account')) {
+                        logged_in = true;
+                        return party();
+                    }
+                    logged_in = false;
 
                     function submitLogin(evt) {
                         evt.preventDefault();
@@ -341,6 +353,17 @@
                         init();
                     }
 
+                    async function getPlaylist() {
+                        const user_playlists = await (await fetch(`${BASE_URL}/playlists/${userID}`)).json()
+                        if(user_playlists.length) {
+                            for(const media of user_playlists) {
+                                playStates.playlist[media.id] = media;
+                                playStates.order.includes(media.id) || playStates.order.push(media.id);
+                            }
+                        }
+                        return;
+                    }
+
                     main.innerHTML = `
                     <div class='party'>
                         <div id='nav-bar'>
@@ -354,16 +377,22 @@
                                 <div class='item clickable' id='logout'>退出登录</div>
                             </div>
                         </div>
-                        <div class='media-container'>
-                            <video id='video-component' controls></video>
-                            <audio id='audio-component' controls></audio>
-                        </div>
-                        <div class='controllers'>
-                            <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
-                            <div class='controller clickable' id='last' title='上一媒体'>${CaretLeftFill}</div>
-                            <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
-                            <div class='controller clickable' id='next' title='下一媒体'>${CaretRightFill}</div>
-                            <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
+                        <div class='party-main'>
+                            <div class='media-container'>
+                                <video id='video-component' controls></video>
+                                <audio id='audio-component' controls></audio>
+                            </div>
+                            <div class='media-progress-container clickable'>
+                                <div class='media-progress-bar'><div class='progress'></div></div>
+                                <div id='media-progress-node'></div>
+                            </div>
+                            <div class='controllers'>
+                                <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
+                                <div class='controller clickable' id='last' title='上一媒体'>${CaretLeftFill}</div>
+                                <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
+                                <div class='controller clickable' id='next' title='下一媒体'>${CaretRightFill}</div>
+                                <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
+                            </div>
                         </div>
                     </div>`
 
@@ -372,6 +401,7 @@
 
                     const setVideoHls = loadHls(video_component, 'video');
                     const setAudioHls = loadHls(audio_component, 'audio');
+
 
                     // controllers
                     function togglePlay(iconOnly, status = 'dynamic') {
@@ -441,16 +471,48 @@
                         playMedia();
                     }
 
+
+                    // buttons on main page
                     const toggle_play_btn = document.getElementById('toggle-play')
                     const how_to_play = document.getElementById('how-to-play')
+                    const media_progress_container = document.querySelector('.media-progress-container');
+                    const media_progress_bar = document.querySelector('.media-progress-bar .progress')
+                    const media_progress_node = document.getElementById('media-progress-node')
 
-                    // button listeners
+                    const mediaProgressStates = {
+                        mousedown: false, offsetX: -1,
+                        width: -1, mouseX: -1
+                    }
+
+                    function setMediaProgressBarWidth() {
+                        mediaProgressStates.width = media_progress_bar.offsetWidth;
+                    }
+                    function setMediaProgress(progress) {
+                        mediaProgressStates.width < 0 && setMediaProgressBarWidth();
+
+                        if(typeof progress === 'number') {
+                            progress = Math.round(mediaProgressStates.width * progress)
+                            mediaProgressStates.offsetX = progress
+                            progress = `${progress}px`;
+                        }
+                        
+                        media_progress_bar.style.transform = `translateX(${progress})`;
+                        media_progress_node.style.transform = `translateX(${progress})`;
+                    }
+                    function calculateSetProgress() {
+                        if(!playStates.order.length || !displaying.elem) return;
+                        setMediaProgress(`${mediaProgressStates.offsetX}px`)
+                        const percent = mediaProgressStates.offsetX / mediaProgressStates.width;
+                        displaying.elem.currentTime = displaying.elem.duration * percent;
+                    }
+
+                        // listeners
                     video_component.onended = playNext;
                     audio_component.onended = playNext;
                     toggle_play_btn.onclick = togglePlay;
                     document.getElementById('last').onclick = playLast
                     document.getElementById('next').onclick = playNext
-                    document.getElementById('show-playlist-icon').onclick = () => showPopup(getPlaylist)
+                    document.getElementById('show-playlist-icon').onclick = () => showPopup(showPlaylist)
                     how_to_play.onclick = function() {
                         if(!playStates.order.length) return;
                         const idx = PLAY_WAYS.indexOf(playStates.how)
@@ -464,8 +526,27 @@
                             playStates.random_order = shuffle(playStates.order)
                         }
                     }
+                    window.addEventListener('resize', setMediaProgressBarWidth);
+                    
+                    media_progress_container.onmouseup = () => {mediaProgressStates.mousedown = false}
+                    media_progress_container.onmouseleave = () => {mediaProgressStates.mousedown = false}
+                    media_progress_container.onmousedown = () => {mediaProgressStates.mousedown = true}
+                    media_progress_container.onclick = evt => {
+                        mediaProgressStates.mouseX = evt.offsetX;
+                        mediaProgressStates.offsetX = mediaProgressStates.mouseX;
+                        calculateSetProgress();
+                    }
+                    media_progress_container.onmousemove = evt => {
+                        mediaProgressStates.mouseX = evt.offsetX;
+                        if(mediaProgressStates.mousedown) {
+                            requestAnimationFrame(()=>{
+                                mediaProgressStates.offsetX = mediaProgressStates.mouseX;
+                                calculateSetProgress()
+                            })
+                        }
+                    }
 
-                    // expand nav bar
+                    // nav bar
                     const nav_bar = document.getElementById('nav-bar');
                     document.getElementById('hamburger-icon').onclick = () => {
                         nav_bar.classList.toggle('expanded-nav-bar')
@@ -616,7 +697,7 @@
                         cancelBtn.onclick = cleanUp;
                     }
 
-                    async function getPlaylist() {
+                    async function showPlaylist() {
                         popupWindow.innerHTML = `
                         <div id='playlist-main'>
                             <div id='loading' class='info'>正在加载播放列表</div>
@@ -624,15 +705,8 @@
                         `
 
                         const playlist_main = document.getElementById('playlist-main');
-                        
-                        const user_playlists = await (await fetch(`${BASE_URL}/playlists/${userID}`)).json()
+                        await getPlaylist();
                         document.getElementById('loading').remove();
-                        if(user_playlists.length) {
-                            for(const media of user_playlists) {
-                                playStates.playlist[media.id] = media;
-                                playStates.order.includes(media.id) || playStates.order.push(media.id);
-                            }
-                        } 
                         
                         if(playStates.order.length) {
                             playStates.order.forEach(id=>{
@@ -657,16 +731,33 @@
                     }
 
                     document.getElementById('logout').onclick = () => {
-                        Cookies.remove('login-account');
+                        // clean up
                         closePopup();
+                        Cookies.remove('login-account');
+                        window.removeEventListener('resize', setMediaProgressBarWidth);
+                        // process to login
                         askLogin();
                         showNotification('登出成功!', 'success')
                     }
                     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
-                    document.getElementById('get-playlist').onclick = () => showPopup(getPlaylist)
+                    document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist)
+
+                    // init
+
+                    // sync progress bar with media progress
+                    function syncMediaProgress() {
+                        logged_in && requestAnimationFrame(syncMediaProgress)
+                        if(displaying.elem && !displaying.elem.paused) {
+                            setMediaProgress(displaying.elem.currentTime / displaying.elem.duration);
+                        }
+                    }
+                    requestAnimationFrame(syncMediaProgress)
+                    // load playlist info on load
+                    getPlaylist();
                 }
 
                 // SECTION: start
+                document.onerror = err => { showNotification(err.message, 'error') }
                 askLogin();
             }
         </script>
@@ -903,12 +994,19 @@
                 margin-bottom: 5px;
             }
 
+            .party .party-main {
+                height: fit-content;
+                width: calc(100% - var(--nav-bar-width));
+                position: absolute;
+                left: var(--nav-bar-width);
+                top: 0;
+            }
+
             .party .media-container {
                 margin-top: 10px;
                 display: flex;
                 position: relative;
-                transform: translateX(var(--nav-bar-width));
-                width: calc(100% - var(--nav-bar-width));
+                width: 100%;
                 height: var(--media-container-height);
                 max-height: calc(100vh - var(--controllers-height));
                 left: 0;
@@ -924,12 +1022,59 @@
                 display: none;
             }
 
+            .party .media-progress-container {
+                --media-progress-container-padding: 15px;
+                --media-progress-bar-height: 6px;
+
+                position: relative;
+                width: 50%;
+                margin: auto;
+                margin-bottom: 20px;
+                height: calc(var(--media-progress-container-padding) * 2 + var(--media-progress-bar-height));
+                padding: var(--media-progress-container-padding) 0px;
+                user-select: none;
+                
+                /* --media-progress-bar-elem-width: calc(100% - var(--media-progress-container-padding) * 2); */
+                --media-progress-bar-elem-width: 100%;
+            }
+
+            .party .media-progress-bar {
+                position: absolute;
+                width: var(--media-progress-bar-elem-width);
+                height: var(--media-progress-bar-height);
+                background-color: lightgray;
+                border-radius: 10px;
+                overflow: hidden;
+                pointer-events: none;
+            }
+
+            .party .media-progress-bar .progress{
+                position: absolute;
+                width: var(--media-progress-bar-elem-width);
+                height: var(--media-progress-bar-height);
+                border-radius: 10px;
+                background-color: red;
+                transform-origin: right center;
+                left: calc(0px - var(--media-progress-bar-elem-width));
+            }
+
+            .party #media-progress-node {
+                position: absolute;
+                width: 14px;
+                height: 14px;
+                background-color: white;
+                border: 1px solid black;
+                border-radius: 15px;
+                top: 11px;
+                left: -7px;
+                pointer-events: none;
+            }
+
             .party .controllers {
                 margin-top: 10px;
                 position: relative;
-                width: calc(100% - var(--nav-bar-width));
-                transform: translateX(var(--nav-bar-width));
-                height: var(--controllers-height);
+                width: 100%;
+                height: fit-content;
                 text-align: center;
                 display: flex;
                 align-items: center;
