@@ -1,4 +1,4 @@
-const { insert, update, getOne, deleteFrom } = require("../database")
+const { insert, update, getOne, deleteFrom, getAll } = require("../database")
 const fs = require('fs');
 const exec = require('child_process').exec
 
@@ -9,12 +9,9 @@ fs.existsSync(`./${FILES_DIR}`) || fs.mkdirSync(`./${FILES_DIR}`)
 fs.existsSync(`./${PROCESS_DIR}`) || fs.mkdirSync(`./${PROCESS_DIR}`)
 
 
-getPlaylistInfo = async function(id) {
-    return await getOne('playlists', '*', {id});
-}
 
 finishUpload = async function(id, process_file) {
-    const { filename, type } = await getPlaylistInfo(id);
+    const { filename, type } = await exports.getPlaylistInfo(id);
     return new Promise(resolve => {
         const playlist_dir = `./${FILES_DIR}/${filename}`
         fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
@@ -32,6 +29,18 @@ finishUpload = async function(id, process_file) {
     })
 }
 
+exports.getPlaylistInfo = async function(id) {
+    return await getOne('playlists', '*', {id});
+}
+
+exports.getUserPlaylist = async function(id) {
+    return await getAll(
+        'playlists', 
+        ['id', 'name', 'type', 'filename'], 
+        {user_id: id, upload_status: 'finished'}
+    );
+}
+
 exports.upload = async function(userID, name, type, filename, suffix) {
     const {lastID} = await insert('playlists', {
         user_id: userID, 
@@ -43,7 +52,7 @@ exports.upload = async function(userID, name, type, filename, suffix) {
 
 exports.uploadChunk = async function(playlistID, isLastChunk, data) {
     try {
-        const { filename, suffix, upload_status } = await getPlaylistInfo(+ playlistID);
+        const { filename, suffix, upload_status } = await exports.getPlaylistInfo(+ playlistID);
         if(upload_status === 'finished') return false;
         const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
         fs.appendFileSync(process_file, data)
