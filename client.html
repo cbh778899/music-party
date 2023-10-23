@@ -6,7 +6,6 @@
         <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
         <script type="text/javascript">
-            // notification element
             function notification(notificationContainer = null) {
                 let notifications = [];
                 let totalHeight = 0;
@@ -68,6 +67,8 @@
                     setTimeout(()=>removeElem(elem, height), time)
                 }
             }
+        </script>
+        <script type="text/javascript">
             window.onload = function() {
             // function test() {
                 'use strict';
@@ -95,6 +96,7 @@
                 const ListUl = formatIcon('list-ul');
                 const VolumeUpFill = formatIcon('volume-up-fill');
                 const VolumeDownFill = formatIcon('volume-down-fill');
+                const VinylFill = formatIcon('vinyl-fill');
 
                 // SECTION: components
                 const notificationContainer = document.getElementById('notification-container');
@@ -230,7 +232,11 @@
                     // functions
                     function loadHls(bound_elem, type) {
                         const hls = Hls.isSupported() ?
-                            new Hls() : (function(){throw new Error('HLS Not Supported!')})();
+                            new Hls() : (function(){
+                                showNotification('您的浏览器不支持通过HLS播放!', 'error')
+                                Cookies.remove('login-account')
+                                askLogin();
+                            })();
 
                         hls.attachMedia(bound_elem);
 
@@ -308,6 +314,7 @@
 
                             if(isLastChunk) {
                                 currentChunkIndex = -1;
+                                await getPlaylist();
                                 updateProgress('finished')
                             } else if(currentChunkIndex >= 0) {
                                 currentChunkIndex ++;
@@ -356,10 +363,25 @@
                         media.type === 'audio' ?
                             setAudioHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`) :
                             setVideoHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`)
-                            
+
                         if(document.querySelector("#playlist-main")) {
                             document.querySelector("#playlist-main .media.playing").classList.remove('playing');
                             document.querySelector(`#playlist-main #playlist-play-btn-${media.id}`).classList.add('playing');
+                        }
+
+                        if(media.type === 'audio') {
+                            audio_title_container.style.display = 'block';
+                            audio_title.textContent = media.name;
+                            audio_title.style.animationName = 'unset';
+                            audio_title.style.animationDuration = `${
+                                Math.max(
+                                    audio_title.clientWidth, 
+                                    audio_title_container.clientWidth
+                                ) / 70}s`;
+                            audio_title.style.animationName = 'music-title-scroll';
+
+                        } else {
+                            audio_title_container.style.display = 'none';
                         }
                     }
 
@@ -412,7 +434,7 @@
                     }
 
                     function interactableProgressBar(name, setElemProgress) {
-                        const states = { mouseDown: false, X: -1, width: -1 }
+                        const states = { mouseDown: false, X: -1, width: -1, locOnPage: -1 }
                         const container = document.querySelector(`.media-${name}-container`);
                         const bar = document.querySelector(`.media-${name}-bar .${name}`)
                         const node = document.getElementById(`media-${name}-node`)
@@ -422,12 +444,19 @@
                         container.onmousedown = () => {states.mouseDown = true}
                         container.onmouseleave = () => {states.mouseDown = false}
                         container.onmouseup = () => {states.mouseDown = false}
+                        container.ontouchstart = () => {states.mouseDown = true}
+                        container.ontouchend = () => {states.mouseDown = false}
+                        container.ontouchcancel = () => {states.mouseDown = false}
                         container.onclick = evt => {
                             states.X = evt.offsetX;
                             calculateProgress('offset');
                         }
                         container.onmousemove = evt => {
                             states.X = evt.offsetX;
+                            states.mouseDown && calculateProgress('offset');
+                        }
+                        container.ontouchmove = evt => {
+                            states.X = evt.changedTouches[0].pageX - states.locOnPage;
                             states.mouseDown && calculateProgress('offset');
                         }
                         function setUIProgress() {
@@ -437,9 +466,11 @@
 
                         function updateWidth() {
                             states.width = container.offsetWidth;
+                            states.locOnPage = container.getBoundingClientRect().left
                         }
 
                         function calculateProgress(type, params = {value: null, total: null}) {
+                            states.X = Math.max(Math.min(states.width, states.X), 0)
                             if(type === 'progress') {
                                 const {value, total} = params;
                                 states.X = Math.round(states.width * (value / total));
@@ -470,21 +501,16 @@
                     // main page
                     main.innerHTML = `
                     <div class='party'>
-                        <div id='nav-bar'>
-                            <div class='clickable' id='hamburger-icon'>${List}</div>
-                            <div class='items'>
-                                <div class='item clickable'><div>用户中心</div></div>
-                                <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
-                                <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
-                                <div class='item clickable'><div>管理我的上传</div></div>
-                                <div class='item clickable'><div>新建/加入房间</div></div>
-                                <div class='item clickable' id='logout'><div>退出登录</div></div>
-                            </div>
-                        </div>
                         <div class='party-main'>
-                            <div class='media-container'>
-                                <video id='video-component'></video>
-                                <audio id='audio-component'></audio>
+                            <div class='media-container-block'>
+                                <div class='media-container'>
+                                    <div class='music-title-container'>
+                                        <div class='music-title'><div class='music-title-text'></div></div>
+                                        ${VinylFill}
+                                    </div>
+                                    <video id='video-component'></video>
+                                    <audio id='audio-component'></audio>
+                                </div>
                             </div>
                             <div class='media-progress-container clickable'>
                                 <div class='media-progress-bar'><div class='progress'></div></div>
@@ -504,11 +530,24 @@
                                 ${VolumeUpFill}
                             </div>
                         </div>
+                        <div id='nav-bar'>
+                            <div class='clickable' id='hamburger-icon'>${List}</div>
+                            <div class='items'>
+                                <div class='item clickable' id='user-center'><div>用户中心</div></div>
+                                <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
+                                <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
+                                <div class='item clickable'><div>管理我的上传</div></div>
+                                <div class='item clickable'><div>新建/加入房间</div></div>
+                                <div class='item clickable' id='logout'><div>退出登录</div></div>
+                            </div>
+                        </div>
                     </div>`
 
                     // components on main page
                     const video_component = document.getElementById('video-component');
                     const audio_component = document.getElementById('audio-component');
+                    const audio_title_container = document.querySelector('.media-container .music-title-container')
+                    const audio_title = document.querySelector('.media-container .music-title-container .music-title .music-title-text')
 
                     const setVideoHls = loadHls(video_component, 'video');
                     const setAudioHls = loadHls(audio_component, 'audio');
@@ -577,36 +616,40 @@
                         </div>
                         `
 
-                        const updateProgress = (playlist_name, elem, stats) => (abort) => (progress) => {
-                            if (!stats.abort) stats.abort = abort;
-
-                            if(!popupWindowVisibility) {
-                                if(typeof progress === 'number') return;
-
-                                if(progress === 'finished') showNotification(`[${playlist_name}] 上传完成!`, 'success');
-                                else if(progress === 'aborted') showNotification(`[${playlist_name}] 上传中断!`, 'error');
-                                return;
-                            }
-
-                            if(typeof progress === 'string') {
-                                elem.style.backgroundImage = `unset`;
-                                elem.style.backgroundColor = `lightgreen`;
-                                elem.textContent = 
-                                    progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...` :
-                                    progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
-                                    progress === 'aborted' ? `[${playlist_name}] 上传中断!` : '';
-                                
-                                if(progress === 'finished') {
-                                    stats.finished = true;
-                                } else if(progress === 'aborted') {
-                                    elem.style.backgroundColor = `red`;
-                                    elem.style.color = `white`;
-                                    stats.finished = true;
+                        function updateProgress(playlist_name, elem, stats) {
+                            const parent = elem.parentElement;
+                            return function(abort) {
+                                stats.abort = abort;
+                                return function(progress) {
+                                    if(!popupWindowVisibility) {
+                                        if(typeof progress === 'number') return;
+        
+                                        if(progress === 'finished') showNotification(`[${playlist_name}] 上传完成!`, 'success');
+                                        else if(progress === 'aborted') showNotification(`[${playlist_name}] 上传中断!`, 'error');
+                                        return;
+                                    } else {
+                                        if(typeof progress === 'string') {
+                                            parent.backgroundImage = `unset`;
+                                            parent.backgroundColor = `lightgreen`;
+                                            elem.textContent = 
+                                                progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...` :
+                                                progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
+                                                progress === 'aborted' ? `[${playlist_name}] 上传中断!` : '';
+                                            
+                                            if(progress === 'finished') {
+                                                stats.finished = true;
+                                            } else if(progress === 'aborted') {
+                                                parent.backgroundColor = `red`;
+                                                parent.color = `white`;
+                                                stats.finished = true;
+                                            }
+                                                
+                                        } else if(typeof progress === 'number') {
+                                            elem.textContent = `[${playlist_name}] 上传中... ${progress}%`;
+                                            parent.backgroundImage = `linear-gradient(to right, lightgreen ${progress}%, white 0%)`
+                                        }
+                                    }
                                 }
-                                    
-                            } else if(typeof progress === 'number') {
-                                elem.textContent = `[${playlist_name}] 上传中... ${progress}%`;
-                                elem.style.backgroundImage = `linear-gradient(to right, lightgreen ${progress}%, white 0%)`
                             }
                         }
 
@@ -789,7 +832,7 @@
 
             #main {
                 width: 100vw;
-                height: 100vh;
+                height: 100dvh;
                 max-height: --webkit-fill-available;
                 position: fixed;
                 top: 0;
@@ -812,7 +855,7 @@
             #popup-container,
             #notification-container {
                 width: 100vw;
-                height: 100vh;
+                height: 100dvh;
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -837,6 +880,7 @@
                 pointer-events: initial;
                 border-radius: 7px;
                 font-size: 15px;
+                text-align: center;
             }
             #notification-container .info { background-color: dodgerblue; }
             #notification-container .success { background-color: limegreen; }
@@ -859,7 +903,7 @@
                 transition-duration: .3s;
                 width: 50%;
                 height: 50%;
-                margin: 15vh 25%;
+                margin: 15dvh 25%;
                 background-color: white;
                 border: 1px solid gray;
                 border-radius: 7px;
@@ -881,7 +925,7 @@
                 display: block;
                 position: relative;
                 margin: auto;
-                margin-top: 20vh;
+                margin-top: 20dvh;
                 text-align: center;
                 margin-bottom: 50px;
             }
@@ -953,6 +997,10 @@
                 --nav-bar-right-padding: 5px;
                 --media-container-height: 500px;
                 --controllers-height: 30px;
+                
+                position: fixed;
+                height: 100%;
+                width: 100%;
             }
             
             .party #nav-bar {
@@ -963,11 +1011,11 @@
                 left: 0;
                 border-right: 1px solid grey;
                 padding: 50px var(--nav-bar-right-padding) 0px var(--nav-bar-left-padding);
-                /* padding-bottom: unset; */
                 transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
                 transition-duration: .5s;
                 z-index: 5;
                 overflow-y: auto;
+                background-color: white;
             }
 
             .party .expanded-nav-bar {
@@ -1021,15 +1069,67 @@
                 top: 0;
             }
 
-            .party .media-container {
+            .party .media-container-block {
                 margin-top: 10px;
-                display: flex;
                 position: relative;
                 width: 100%;
                 height: var(--media-container-height);
-                max-height: calc(100vh - var(--controllers-height));
-                left: 0;
+            }
+
+            .party .media-container {
+                display: flex;
+                width: 100%;
+                height: 100%;
                 align-items: center;
+            }
+
+            .party .media-container .music-title-container {
+                --music-title-size: calc(var(--media-container-height) - 100px);
+
+                position: relative;
+                margin: auto;
+                width: var(--music-title-size);
+                height: var(--music-title-size);
+            }
+            .party .media-container .music-title-container .music-title {
+                --music-title-content-height: calc(var(--media-container-height) / 4);
+                position: absolute;
+                width: calc(var(--music-title-size) - 50px);
+                text-align: center;
+                color: white;
+                font-size: calc(var(--music-title-content-height) / 2);
+                z-index: 2;
+                height: var(--music-title-content-height);
+                line-height: var(--music-title-content-height);
+                margin-top: calc((var(--music-title-size) - var(--music-title-content-height)) / 2);
+                margin-left: 25px;
+                -webkit-text-stroke: 1px black;
+                overflow: hidden;
+            }
+            .party .media-container .music-title-container .music-title .music-title-text {
+                animation-name: music-title-scroll;
+                animation-iteration-count: infinite;
+                animation-timing-function: linear;
+                text-wrap: nowrap;
+                width: fit-content;
+                user-select: none;
+            }
+            
+            .party .media-container .music-title-container i {
+                font-size: var(--music-title-size);
+                color: rgb(50 50 50);
+                display: block;
+                height: 100%;
+                width: 100%;
+                position: absolute;
+            }
+            .party .media-container .music-title-container i::before {
+                vertical-align: 1em;
+            }
+
+            @keyframes music-title-scroll {
+                from { transform: translateX(var(--music-title-size)); }
+                to { transform: translateX(-100%); }
             }
 
             .party .media-container #video-component,
@@ -1148,7 +1248,7 @@
                 margin: auto;
                 width: 100%;
                 height: 300px;
-                border: 1px dashed lightgray;
+                border: 20px dashed lightgray;
                 border-radius: 10px;
             }
             #upload-media-container .upload-file-container .show-upload,
@@ -1191,6 +1291,7 @@
                 margin: auto;
                 margin-top: 20px;
                 position: relative;
+                overflow: hidden;
             }
 
             #upload-media-container .progress-bar .progress-text,
@@ -1278,13 +1379,173 @@
                 background-color: #e0e0e0;
             }
 
+            #playlist-main .info {
+                text-align: center;
+                font-size: 30px;
+                margin-top: 10vh;
+            }
+
             /* mobile view */
             @media screen and (max-width: 1023px) {
                 #notification-container .notification {
-                    width: 40%;
+                    width: 50%;
+                    font-size: 40px;
+                    border-radius: 15px;
                 }
                 #login-form {
-                    --input-width: 70vw;
+                    --input-width: 90vw;
+                    --input-height: 100px;
+                    --show-pass-icon-height: 50px;
+                    font-size: 50px;
+                }
+                #login-form input:not(input[type='checkbox']) {
+                    border-radius: 15px;
+                    padding: 0 40px;
+                    font-size: 35px;
+                }
+                #login-form button {
+                    font-size: 35px;
+                    border-radius: 15px;
+                }
+                #login-form #show-password i::before {
+                    vertical-align: 1em;
+                }
+                #login-form .remember-password-container input {
+                    margin-right: 15px;
+                    width: 40px;
+                    height: 40px;
+                }
+
+                #popup-container #popup-window {
+                    width: 90%;
+                    margin: 25% 5%;
+                    border-radius: 15px;
+                }
+
+                #playlist-main {
+                    --media-height: 100px;
+                }
+
+                #playlist-main .media {
+                    border-radius: 15px;
+                    font-size: 40px;
+                }
+
+                #playlist-main .info {
+                    font-size: 40px;
+                }
+
+                .party {
+                    --nav-bar-width: 0px;
+                    --media-container-height: 800px;
+                    --controllers-height: 60px;
+                }
+
+                .party #nav-bar {
+                    width: 100%;
+                    height: fit-content;
+                    position: relative;
+                    transform: none;
+                    border-right: unset;
+                    padding: var(--nav-bar-left-padding);
+                    overflow: unset;
+                    transition-duration: unset;
+                }
+
+                .party #nav-bar #hamburger-icon {
+                    display: none;
+                }
+
+                .party #nav-bar .items {
+                    height: fit-content;
+                    width: 100%;
+                    position: relative;
+                }
+
+                .party #nav-bar .items .item {
+                    width: 100%;
+                    padding: 20px;
+                    border-radius: 15px;
+                    font-size: 40px;
+                }
+
+                .party #media-volume-node, .party #media-progress-node {
+                    top: 25px;
+                    width: 25px;
+                    height: 25px;
+                    border-radius: 25px;
+                }
+
+                .party .party-main {
+                    position: relative;
+                }
+
+                .party .controllers .controller {
+                    margin: 0px 30px;
+                }
+
+                .party .media-volume-container i {
+                    font-size: 40px;
+                    top: 8px;
+                    left: -50px;
+                }
+                .party .media-volume-container i:last-child {
+                    right: -50px;
+                }
+                .party .media-progress-container, .party .media-volume-container {
+                    --media-progress-container-padding: 30px;
+                    --media-progress-bar-height: 15px;
+                    width: 80%;
+                }
+                .party .media-volume-container {
+                    width: 50%;
+                }
+                .party .media-container .music-title-container .music-title {
+                    -webkit-text-stroke: 2px black;
+                }
+
+                #upload-media-container .upload-file-container {
+                    height: 500px;
+                }
+
+                #upload-media-container .upload-file-container .show-upload span {
+                    font-size: 50px;
+                }
+                
+                #upload-media-container .progress-bar {
+                    --progress-bar-height: 100px;
+                    border-width: 5px;
+                }
+
+                #upload-media-container .progress-bar .progress-text, #upload-media-container .progress-bar input {
+                    font-size: 30px;
+                }
+                #upload-media-container .progress-bar .progress-text {
+                    text-wrap: nowrap;
+                    min-width: 100%;
+                    width: fit-content;
+                }
+
+                #upload-media-container .progress-bar .remove-file i {
+                    font-size: 30px;
+                }
+
+                #upload-media-container .progress-bar .remove-file i::before {
+                    vertical-align: unset;
+                }
+
+                #upload-media-container .btn-container {
+                    display: block;
+                    margin-top: 30px;
+                }
+
+                #upload-media-container .btn-container button {
+                    margin: unset;
+                    margin-bottom: 20px;
+                    font-size: 30px;
+                    border-radius: 15px;
+                    display: block;
+                    height: 70px;
                 }
             }
         </style>
