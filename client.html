@@ -122,7 +122,7 @@
                         popupContainer.style.backgroundColor = 'rgba(0,0,0,.7)';
                         popupContainer.style.pointerEvents = 'initial';
                         buildPage();
-                        popupWindow.style.transform = 'scale(1)';
+                        popupWindow.style.transform = 'unset';
                         popupWindowVisibility = true;
                     }
                 }
@@ -429,6 +429,8 @@
                             case ' ': togglePlay(false); break;
                             case 'ArrowLeft': calculateSetProgressByTime(-5); break;
                             case 'ArrowRight': calculateSetProgressByTime(5); break;
+                            case 'ArrowUp': setVolume(0.02); break;
+                            case 'ArrowDown': setVolume(-0.02); break;
                             default: break;
                         }
                     }
@@ -496,6 +498,54 @@
                         time = Math.max(Math.min(currentTime + time, duration), 0);
                         displaying.elem.currentTime = time;
                         calculateMediaProgress('progress', {value: time, total: duration});
+                    }
+
+                    function setVolume(change) {
+                        if(!displaying.elem) return;
+                        const newVol = Math.max(Math.min(displaying.currentVolume + change, 1), 0);
+                        displaying.elem.volume = newVol;
+                        displaying.currentVolume = newVol;
+                        calculateMediaVolume('progress', {
+                            value:  newVol,
+                            total: 1
+                        })
+                    }
+
+                    function updateTextScrollAnimation(elem, parentElem = null, pauseAfterFinish = 2000, speed = 70) {
+                        parentElem = parentElem || elem.parentElement;
+                            
+                        if(elem.offsetWidth <= parentElem.offsetWidth) return null;
+
+                        let moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10
+                        
+                        let last_update_time = Date.now(),
+                            play_end = false,
+                            position = 0;
+                        
+                        function move() {
+                            requestAnimationFrame(move)
+                            const time_past = Date.now() - last_update_time;
+                            if(!play_end) {
+                                elem.style.transform = `translateX(${Math.floor(position)}px)`;
+                                position -= last_update_time < 0 ? 0 : time_past / 1000 * speed;
+                                last_update_time = Date.now();
+                                if(Math.abs(position) > moveDistance) {
+                                    play_end = true;
+                                    position = 0;
+                                }
+                            } else if(time_past >= pauseAfterFinish) {
+                                play_end = false;
+                                last_update_time = Date.now();
+                            }
+                        }
+                        requestAnimationFrame(move)
+
+                        return function requestUpdate() {
+                            moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10;
+                            last_update_time = Date.now();
+                            play_end = false;
+                            position = 0;
+                        }
                     }
 
                     // main page
@@ -616,8 +666,9 @@
                         </div>
                         `
 
-                        function updateProgress(playlist_name, elem, stats) {
-                            const parent = elem.parentElement;
+                        function updateProgress(playlist_name, elem, bgElem, stats) {
+                            let updateAnimation = updateTextScrollAnimation(elem)
+                            let firstUpdate = true;
                             return function(abort) {
                                 stats.abort = abort;
                                 return function(progress) {
@@ -629,24 +680,28 @@
                                         return;
                                     } else {
                                         if(typeof progress === 'string') {
-                                            parent.backgroundImage = `unset`;
-                                            parent.backgroundColor = `lightgreen`;
+                                            bgElem.style.transform = 'translateX(0)';
                                             elem.textContent = 
-                                                progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...` :
+                                                progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...此过程可能较长, 如需关闭请点击空白处.` :
                                                 progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
                                                 progress === 'aborted' ? `[${playlist_name}] 上传中断!` : '';
                                             
                                             if(progress === 'finished') {
                                                 stats.finished = true;
                                             } else if(progress === 'aborted') {
-                                                parent.backgroundColor = `red`;
-                                                parent.color = `white`;
+                                                bgElem.style.backgroundColor = `red`;
+                                                elem.style.color = `white`;
                                                 stats.finished = true;
                                             }
+                                            if(updateAnimation) { updateAnimation() } else { updateAnimation = updateTextScrollAnimation(elem) };
                                                 
                                         } else if(typeof progress === 'number') {
-                                            elem.textContent = `[${playlist_name}] 上传中... ${progress}%`;
-                                            parent.backgroundImage = `linear-gradient(to right, lightgreen ${progress}%, white 0%)`
+                                            elem.textContent = `[${playlist_name}] 上传中... ${progress < 10 && '0' || ''}${progress}%`;
+                                            bgElem.style.transform = `translateX(-${100 - progress}%)`
+                                            if(firstUpdate) {
+                                                if(updateAnimation) { updateAnimation() } else { updateAnimation = updateTextScrollAnimation(elem) };
+                                                firstUpdate = false;
+                                            }
                                         }
                                     }
                                 }
@@ -739,11 +794,17 @@
 
                                 const { file, rename, displayElemContainer } = e;
                                 displayElemContainer.innerHTML = '';
+
+                                const progress_background = document.createElement('div')
+                                progress_background.className = 'progress-background';
+                                displayElemContainer.appendChild(progress_background)
+
                                 const progress_text = document.createElement('div')
                                 progress_text.className = 'progress-text';
                                 progress_text.textContent = `[${rename || file.name}] 等待上传中...`;
                                 displayElemContainer.appendChild(progress_text)
-                                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, e));
+
+                                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, progress_background, e));
                             })
                         }
 
@@ -768,7 +829,11 @@
                                 playBtn.className = 'media clickable'
                                 media.id === playStates.playing && playBtn.classList.add('playing')
                                 playBtn.id = `playlist-play-btn-${media.id}`;
-                                playBtn.textContent = media.name;
+
+                                const playBtnText = document.createElement('div')
+                                playBtnText.className = 'title-text';
+                                playBtnText.textContent = media.name;
+                                
                                 playBtn.onclick = () => {
                                     const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
                                     last_playing && last_playing.classList.remove('playing')
@@ -776,7 +841,11 @@
                                     playStates.playing = media.id;
                                     playMedia();
                                 }
+                                
+                                playBtn.appendChild(playBtnText);
                                 playlist_main.appendChild(playBtn);
+
+                                updateTextScrollAnimation(playBtnText);
                             })
                         } else {
                             playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
@@ -1154,7 +1223,6 @@
                 padding: var(--media-progress-container-padding) 0px;
                 user-select: none;
                 
-                /* --media-progress-bar-elem-width: calc(100% - var(--media-progress-container-padding) * 2); */
                 --media-progress-bar-elem-width: 100%;
             }
 
@@ -1295,13 +1363,14 @@
             }
 
             #upload-media-container .progress-bar .progress-text,
-            #upload-media-container .progress-bar input {
+            #upload-media-container .progress-bar input,
+            #upload-media-container .progress-bar .progress-background {
                 position: absolute;
                 left: 0;
                 top: 0;
                 width: 100%;
                 height: 100%;
-                z-index: 1;
+                z-index: 2;
                 border: unset;
                 padding: 0px 20px;
                 border-radius: inherit;
@@ -1311,6 +1380,16 @@
             #upload-media-container .progress-bar .progress-text {
                 line-height: var(--progress-bar-height);
                 user-select: none;
+                text-wrap: nowrap;
+                min-width: 100%;
+                width: fit-content;
+            }
+            #upload-media-container .progress-bar .progress-background {
+                z-index: 1;
+                border-radius: unset;
+                padding: unset;
+                transform: translateX(-100%);
+                background-color: lightgreen;
             }
 
             #upload-media-container .progress-bar .remove-file {
@@ -1357,14 +1436,20 @@
             #playlist-main {
                 --media-height: 50px;
                 --focus-color: #ededed;
+                padding: 0px 15px;
             }
 
             #playlist-main .media {
                 width: 100%;
                 height: var(--media-height);
                 line-height: var(--media-height);
-                padding: 0px 15px;
                 border-radius: 5px;
+                padding: 0px 5px;
+                overflow: hidden;
+            }
+            #playlist-main .media .title-text {
+                text-wrap: nowrap;
+                width: fit-content;
             }
 
             #playlist-main .media:hover {
@@ -1428,6 +1513,9 @@
 
                 #playlist-main .media {
                     border-radius: 15px;
+                }
+
+                #playlist-main .media .title-text {
                     font-size: 40px;
                 }
 
@@ -1517,13 +1605,9 @@
                     border-width: 5px;
                 }
 
-                #upload-media-container .progress-bar .progress-text, #upload-media-container .progress-bar input {
+                #upload-media-container .progress-bar .progress-text, 
+                #upload-media-container .progress-bar input {
                     font-size: 30px;
-                }
-                #upload-media-container .progress-bar .progress-text {
-                    text-wrap: nowrap;
-                    min-width: 100%;
-                    width: fit-content;
                 }
 
                 #upload-media-container .progress-bar .remove-file i {
