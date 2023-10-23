@@ -11,7 +11,7 @@ require('./database').openDB(null, true);
 const express = require('express');
 const bodyParser = require('body-parser');
 const { login } = require('./actions/account_actions');
-const { upload, uploadChunk, removePlayList } = require('./actions/playlist_actions');
+const { upload, uploadChunk, removePlayList, getUserPlaylist, getPlaylistInfo } = require('./actions/playlist_actions');
 const app = express();
 app.use(require('cors')())
 app.use(bodyParser.json())
@@ -27,16 +27,14 @@ router.post('/login', async (req, res) => {
     res.json(await login(account, password));
 })
 
-router.get('/playlists', (req, res) => {
-    const playlists = fs.readdirSync(`./${FILES_DIR}`, {withFileTypes: true})
-        .filter(f=>f.isDirectory())
-        .map(e=>e.name)
-    res.json(playlists)
+router.get('/playlists/:id', async (req, res) => {
+    const id = + req.params.id;
+    res.json(await getUserPlaylist(id))
 })
 
-router.get('/retrieve-playlist/:playlist/:filename', (req, res)=>{
-    const { playlist, filename } = req.params;
-    res.sendFile(`${__dirname}/all_files/${playlist}/${filename}`)
+router.get('/retrieve-playlist/:hashName/:filename', (req, res)=>{
+    const { hashName, filename } = req.params;
+    res.sendFile(`${__dirname}/all_files/${hashName}/${filename}`)
 })
 
 router.get('/ask-file/:filename', (req, res)=>{
@@ -71,7 +69,7 @@ router.delete('/playlist/:id', async (req, res) => {
 app.use('/', router)
 
 const PORT = process.env.PORT || 3000
-app.listen(PORT, ()=>{
+app.listen(PORT, '0.0.0.0', ()=>{
     console.log(
         `App listening on port ${PORT}\nGo to http://localhost:${PORT} for local view`
     );
