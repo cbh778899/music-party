@@ -69,1569 +69,1625 @@
             }
         </script>
         <script type="text/javascript">
-            window.onload = function() {
-            // function test() {
-                'use strict';
+window.onload = function() {
+'use strict';
 
-                // SECTION: constants
-                const BASE_URL = '';
-                const FILE_CHUNK_SIZE = 1024 * 1024;
-                let logged_in = false;
-                
-                // SECTION: icon
-                const formatIcon = className => `<i class='bi bi-${className}'></i>`;
+// SECTION: constants
+const BASE_URL = '';
+const FILE_CHUNK_SIZE = 1024 * 1024;
+const MEDIA_FRAGMENT_DURATION = 10;
+const MAX_RETRY = 3;
+let logged_in = false;
 
-                const Eye = formatIcon('eye');
-                const EyeSlash = formatIcon('eye-slash');
-                const SkipStartFill = formatIcon('skip-start-fill');
-                const SkipEndFill = formatIcon(`skip-end-fill`);
-                const PauseFill = formatIcon('pause-fill');
-                const Play = formatIcon('play');
-                const List = formatIcon('list');
-                const XLg = formatIcon('x-lg');
-                const Shuffle = formatIcon('shuffle');
-                const MusicNoteList = formatIcon('music-note-list');
-                const Repeat = formatIcon('repeat');
-                const RepeatOne = formatIcon('repeat-1');
-                const ListUl = formatIcon('list-ul');
-                const VolumeUpFill = formatIcon('volume-up-fill');
-                const VolumeDownFill = formatIcon('volume-down-fill');
-                const VinylFill = formatIcon('vinyl-fill');
+// SECTION: icon
+const formatIcon = className => `<i class='bi bi-${className}'></i>`;
 
-                // SECTION: components
-                const notificationContainer = document.getElementById('notification-container');
-                const popupContainer = document.getElementById('popup-container');
-                const popupWindow = document.getElementById('popup-window');
-                const main = document.getElementById('main');
+const Eye = formatIcon('eye');
+const EyeSlash = formatIcon('eye-slash');
+const SkipStartFill = formatIcon('skip-start-fill');
+const SkipEndFill = formatIcon(`skip-end-fill`);
+const PauseFill = formatIcon('pause-fill');
+const Play = formatIcon('play');
+const List = formatIcon('list');
+const XLg = formatIcon('x-lg');
+const Shuffle = formatIcon('shuffle');
+const MusicNoteList = formatIcon('music-note-list');
+const Repeat = formatIcon('repeat');
+const RepeatOne = formatIcon('repeat-1');
+const ListUl = formatIcon('list-ul');
+const VolumeUpFill = formatIcon('volume-up-fill');
+const VolumeDownFill = formatIcon('volume-down-fill');
+const VinylFill = formatIcon('vinyl-fill');
 
-                // SECTION: notification
-                const showNotification = notification(notificationContainer);
+// SECTION: components
+const notificationContainer = document.getElementById('notification-container');
+const popupContainer = document.getElementById('popup-container');
+const popupWindow = document.getElementById('popup-window');
+const main = document.getElementById('main');
 
-                // SECTION: popup
-                let popupWindowVisibility = false;
+// SECTION: notification
+const showNotification = notification(notificationContainer);
 
-                async function showPopup(buildPage) {
-                    if(!buildPage) {
-                        popupContainer.style.backgroundColor = 'unset';
-                        popupContainer.style.pointerEvents = 'none';
-                        popupWindow.style.transform = 'scale(0)';
-                        await new Promise(s=>setTimeout(s, 300));
-                        popupWindow.innerHTML = '';
-                        popupWindowVisibility = false;
-                    } else {
-                        popupContainer.style.backgroundColor = 'rgba(0,0,0,.7)';
-                        popupContainer.style.pointerEvents = 'initial';
-                        buildPage();
-                        popupWindow.style.transform = 'unset';
-                        popupWindowVisibility = true;
-                    }
-                }
-                const closePopup = () => showPopup(null);
-                popupContainer.onclick = evt => {
-                    if(evt.target === popupContainer) {
-                        closePopup();
-                    }
-                }
-                
-                // SECTION: utils
-                function shuffle(arr) {
-                    return [...arr].sort(()=> .5 - Math.random())
-                }
+// SECTION: popup
+let popupWindowVisibility = false;
 
-                // SECTION: pages
-                function askLogin() {
+async function showPopup(buildPage) {
+    if(!buildPage) {
+        popupContainer.style.backgroundColor = 'unset';
+        popupContainer.style.pointerEvents = 'none';
+        popupWindow.style.transform = 'scale(0)';
+        await new Promise(s=>setTimeout(s, 300));
+        popupWindow.innerHTML = '';
+        popupWindowVisibility = false;
+    } else {
+        popupContainer.style.backgroundColor = 'rgba(0,0,0,.7)';
+        popupContainer.style.pointerEvents = 'initial';
+        buildPage();
+        popupWindow.style.transform = 'unset';
+        popupWindowVisibility = true;
+    }
+}
+const closePopup = () => showPopup(null);
+popupContainer.onclick = evt => {
+    if(evt.target === popupContainer) {
+        closePopup();
+    }
+}
 
-                    if(Cookies.get('login-account')) {
-                        logged_in = true;
-                        return party();
-                    }
-                    logged_in = false;
+// SECTION: utils
+function shuffle(arr) {
+    return [...arr].sort(()=> .5 - Math.random())
+}
 
-                    function submitLogin(evt) {
-                        evt.preventDefault();
-                        const account = evt.target.account.value;
-                        const password = evt.target.password.value;
-                        
-                        fetch(`${BASE_URL}/login`, {
-                            method: 'POST',
-                            body: JSON.stringify({account, password}),
-                            mode: "cors",
-                            headers: {'Content-Type': 'application/json'}
-                        }).then(async res => {
-                            const { result, userID } = await res.json();
-                            if(result !== 'login-failed') {
-                                if(result === 'login-success') showNotification('登陆成功!', 'success')
-                                else if(result === 'account-created') showNotification('注册成功, 将为您登录', 'success')
-                                Cookies.set('login-account', userID, { expires: 365 } );
-                                if(evt.target['remember-password'].checked) {
-                                    localStorage.setItem('remember-password', true);
-                                    localStorage.setItem('account', account);
-                                    localStorage.setItem('password', password);
-                                } else if(localStorage.getItem('remember-password')) {
-                                    localStorage.removeItem('remember-password');
-                                    localStorage.removeItem('account');
-                                    localStorage.removeItem('password');
-                                }
-                                // go to party main
-                                party();
-                            } else {
-                                showNotification('密码不正确!', 'err')
-                            }
-                        })
-                    }
+// SECTION: pages
+function askLogin() {
 
-                    main.innerHTML = `
-                    <form id='login-form'>
-                        <span class='description'>请输入账号密码登录，如果账号不存在将会直接创建</span>
-                        <input type='text' name='account' id='login-account' placeholder="请输入您的账号" >
-                        <div id='show-password' class='clickable'>${Eye}</div>
-                        <input type='password' name='password' id='login-password' placeholder='请输入您的密码' >
-                        <div class='remember-password-container'>
-                            <input type='checkbox' id='remember-password' name='remember-password'>
-                            <span>记住密码</span>
-                        </div>
-                        <button class='clickable' type='submit'>登录</button>
-                    </form>
-                    `
+    if(Cookies.get('login-account')) {
+        logged_in = true;
+        return party();
+    }
+    logged_in = false;
 
-                    let password_display = false;
-                    const password_elem = document.getElementById('login-password');
-                    const show_password_elem = document.getElementById('show-password');
-
-                    if(localStorage.getItem('remember-password')) {
-                        password_elem.value = localStorage.getItem('password');
-                        document.getElementById('login-account').value = localStorage.getItem('account');
-                        document.getElementById('remember-password').checked = true;
-                    }
-
-                    show_password_elem.onclick = () => {
-                        password_display = !password_display;
-                        show_password_elem.innerHTML = password_display ? EyeSlash : Eye;
-                        password_elem.type = password_display ? 'text' : 'password';
-                    }
-                    document.getElementById('login-form').onsubmit = submitLogin;
-                }
-
-                function party() {
-
-                    // init states
-                    const PLAY_WAYS = ['loop', 'single', 'random', 'playlist']
-
-                    let displaying = {
-                        type: '', elem: null, currentVolume: 0.5
-                    }
-
-                    const playStates = {
-                        playlist: {},
-                        playing: 0, order: [],
-                        how: 'loop', random_order: []
-                    }
-
-                    const userID = + Cookies.get('login-account')
-
-                    // functions
-                    function loadHls(bound_elem, type) {
-                        const hls = Hls.isSupported() ?
-                            new Hls() : (function(){
-                                showNotification('您的浏览器不支持通过HLS播放!', 'error')
-                                Cookies.remove('login-account')
-                                askLogin();
-                            })();
-
-                        hls.attachMedia(bound_elem);
-
-                        return (url, startPlay = true)=>{
-                            hls.loadSource(url);
-                            if(displaying.type !== type) {
-                                if(displaying.elem) {
-                                    displaying.elem.style.display = 'none';
-                                    displaying.elem.pause();
-                                    displaying.type = type;
-                                }
-                                displaying.elem = bound_elem;
-                                bound_elem.style.display = 'block';
-                            }
-                            startPlay && bound_elem.play();
-                            togglePlay(true, true)
-                            bound_elem.volume = displaying.currentVolume;
-                            calculateMediaVolume('progress', {value: displaying.currentVolume, total: 1})
-                        }
-                    }
-
-                    async function uploadFile(file, rename, progressControl) {
-                        let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
-                            currentChunkIndex = 0,
-                            fileType = file.type.split('/').shift(),
-                            playlistID = -1, 
-                            updateProgress = progressControl(abort);
-
-                        async function init() {
-                            playlistID = + (await (await fetch('/pre-upload', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({
-                                    userID,
-                                    playListName: (rename || file.name),
-                                    suffix: file.name.split('.').pop(),
-                                    fileType
-                                })
-                            })).text());
-                            cutFileChunk();
-                        }
-
-                        function abort() {
-                            if(currentChunkIndex !== -1 && playlistID !== -1) {
-                                currentChunkIndex = -1;
-                                updateProgress('aborted');
-                                fetch(`${BASE_URL}/playlist/${playlistID}`, {
-                                    method: 'DELETE'
-                                })
-                            }
-                        }
-
-                        function cutFileChunk() {
-                            if(currentChunkIndex < 0) return;
-
-                            const start = currentChunkIndex * FILE_CHUNK_SIZE;
-                            const end = Math.min(start + FILE_CHUNK_SIZE, file.size);
-                            sendFileChunk(file.slice(start, end));
-                        }
-
-                        async function sendFileChunk(chunk) {
-                            if(currentChunkIndex < 0) return;
-
-                            const isLastChunk = + (currentChunkIndex === totalChunks - 1)
-                            const searchParams = new URLSearchParams({
-                                playlistID, isLastChunk
-                            })
-                            isLastChunk && updateProgress('waiting-process');
-
-                            await fetch(`${BASE_URL}/upload-file?${searchParams.toString()}`, {
-                                method: 'POST',
-                                body: chunk,
-                                headers: {'Content-Type': 'application/octet-stream'}
-                            })
-
-                            if(isLastChunk) {
-                                currentChunkIndex = -1;
-                                await getPlaylist();
-                                updateProgress('finished')
-                            } else if(currentChunkIndex >= 0) {
-                                currentChunkIndex ++;
-                                updateProgress(Math.floor((currentChunkIndex / (totalChunks - 1)) * 100))
-                                cutFileChunk();
-                            }
-                        }
-
-                        init();
-                    }
-
-                    async function getPlaylist() {
-                        const user_playlists = await (await fetch(`${BASE_URL}/playlists/${userID}`)).json()
-                        if(user_playlists.length) {
-                            for(const media of user_playlists) {
-                                playStates.playlist[media.id] = media;
-                                playStates.order.includes(media.id) || playStates.order.push(media.id);
-                            }
-                        }
-                        return;
-                    }
-
-                    function togglePlay(iconOnly, status = 'dynamic') {
-                        iconOnly = typeof iconOnly === "boolean" ? iconOnly : false
-                        if(displaying.elem) {
-                            const isPlaying = 
-                                status === 'dynamic' ? 
-                                !displaying.elem.paused : !status;
-
-                            if(isPlaying) {
-                                !iconOnly && displaying.elem.pause();
-                                toggle_play_btn.innerHTML = Play;
-                                toggle_play_btn.title = '播放';
-                            } else {
-                                !iconOnly && displaying.elem.play();
-                                toggle_play_btn.innerHTML = PauseFill;
-                                toggle_play_btn.title = '暂停';
-                            }
-                        } else if(playStates.order.length && playStates.playing === 0) {
-                            playNext();
-                        }
-                    }
-
-                    function playMedia() {
-                        const media = playStates.playlist[playStates.playing]
-                        media.type === 'audio' ?
-                            setAudioHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`) :
-                            setVideoHls(`${BASE_URL}/retrieve-playlist/${media.filename}/${media.filename}.m3u8`)
-
-                        if(document.querySelector("#playlist-main")) {
-                            document.querySelector("#playlist-main .media.playing").classList.remove('playing');
-                            document.querySelector(`#playlist-main #playlist-play-btn-${media.id}`).classList.add('playing');
-                        }
-
-                        if(media.type === 'audio') {
-                            audio_title_container.style.display = 'block';
-                            audio_title.textContent = media.name;
-                            audio_title.style.animationName = 'unset';
-                            audio_title.style.animationDuration = `${
-                                Math.max(
-                                    audio_title.clientWidth, 
-                                    audio_title_container.clientWidth
-                                ) / 70}s`;
-                            audio_title.style.animationName = 'music-title-scroll';
-
-                        } else {
-                            audio_title_container.style.display = 'none';
-                        }
-                    }
-
-                    function playNext() {
-                        if(!playStates.order.length) return;
-                        if(playStates.how === 'single') {
-                            playMedia(); return;
-                        }
-                        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
-                        const index = followOrder.indexOf(playStates.playing);
-                        // if is last
-                        if(index >= followOrder.length - 1) {
-                            switch(playStates.how) {
-                                case 'playlist': return;
-                                case 'random':
-                                    playStates.random_order = shuffle(playStates.order);
-                                    playStates.playing = playStates.random_order[0];
-                                    break;
-                                case 'loop':
-                                default:
-                                    playStates.playing = playStates.order[0];
-                                    break;
-                            }
-                        } else playStates.playing = followOrder[index + 1]
-                        playMedia();
-                    }
-
-                    function playLast() {
-                        if(!playStates.order.length) return;
-                        if(playStates.how === 'single') {
-                            playMedia(); return;
-                        }
-                        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
-                        const index = followOrder.indexOf(playStates.playing);
-                        // if is first
-                        if(index <= 0) {
-                            if(playStates.how === 'playlist') return;
-                            else playStates.playing = followOrder.slice(-1)[0]
-                        } else playStates.playing = followOrder[index - 1];
-                        playMedia();
-                    }
-
-                    function keyboardControl(evt) {
-                        switch(evt.key) {
-                            case ' ': togglePlay(false); break;
-                            case 'ArrowLeft': calculateSetProgressByTime(-5); break;
-                            case 'ArrowRight': calculateSetProgressByTime(5); break;
-                            case 'ArrowUp': setVolume(0.02); break;
-                            case 'ArrowDown': setVolume(-0.02); break;
-                            default: break;
-                        }
-                    }
-
-                    function interactableProgressBar(name, setElemProgress) {
-                        const states = { mouseDown: false, X: -1, width: -1, locOnPage: -1 }
-                        const container = document.querySelector(`.media-${name}-container`);
-                        const bar = document.querySelector(`.media-${name}-bar .${name}`)
-                        const node = document.getElementById(`media-${name}-node`)
-                        // read layout property to force render
-                        container.offsetWidth;
-
-                        container.onmousedown = () => {states.mouseDown = true}
-                        container.onmouseleave = () => {states.mouseDown = false}
-                        container.onmouseup = () => {states.mouseDown = false}
-                        container.ontouchstart = () => {states.mouseDown = true}
-                        container.ontouchend = () => {states.mouseDown = false}
-                        container.ontouchcancel = () => {states.mouseDown = false}
-                        container.onclick = evt => {
-                            states.X = evt.offsetX;
-                            calculateProgress('offset');
-                        }
-                        container.onmousemove = evt => {
-                            states.X = evt.offsetX;
-                            states.mouseDown && calculateProgress('offset');
-                        }
-                        container.ontouchmove = evt => {
-                            states.X = evt.changedTouches[0].pageX - states.locOnPage;
-                            states.mouseDown && calculateProgress('offset');
-                        }
-                        function setUIProgress() {
-                            bar.style.transform = `translateX(${states.X}px)`;
-                            node.style.transform = `translateX(${states.X}px)`;
-                        }
-
-                        function updateWidth() {
-                            states.width = container.offsetWidth;
-                            states.locOnPage = container.getBoundingClientRect().left
-                        }
-
-                        function calculateProgress(type, params = {value: null, total: null}) {
-                            states.X = Math.max(Math.min(states.width, states.X), 0)
-                            if(type === 'progress') {
-                                const {value, total} = params;
-                                states.X = Math.round(states.width * (value / total));
-                            } else {
-                                if(!setElemProgress(states.X / states.width, 'percent')) return;
-                            }
-                            setUIProgress()
-                        }
-
-                        updateWidth();
-
-                        return [calculateProgress, updateWidth]
-                    }
-
-                    function setInteractableProgressBarWidth() {
-                        updateMediaProgressWidth();
-                    }
-                    
-                    function calculateSetProgressByTime(time = 0) {
-                        if(!displaying.elem) return;
-                        let duration = displaying.elem.duration,
-                            currentTime = displaying.elem.currentTime;
-                        time = Math.max(Math.min(currentTime + time, duration), 0);
-                        displaying.elem.currentTime = time;
-                        calculateMediaProgress('progress', {value: time, total: duration});
-                    }
-
-                    function setVolume(change) {
-                        if(!displaying.elem) return;
-                        const newVol = Math.max(Math.min(displaying.currentVolume + change, 1), 0);
-                        displaying.elem.volume = newVol;
-                        displaying.currentVolume = newVol;
-                        calculateMediaVolume('progress', {
-                            value:  newVol,
-                            total: 1
-                        })
-                    }
-
-                    function updateTextScrollAnimation(elem, parentElem = null, pauseAfterFinish = 2000, speed = 70) {
-                        parentElem = parentElem || elem.parentElement;
-                            
-                        if(elem.offsetWidth <= parentElem.offsetWidth) return null;
-
-                        let moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10
-                        
-                        let last_update_time = Date.now(),
-                            play_end = false,
-                            position = 0;
-                        
-                        function move() {
-                            requestAnimationFrame(move)
-                            const time_past = Date.now() - last_update_time;
-                            if(!play_end) {
-                                elem.style.transform = `translateX(${Math.floor(position)}px)`;
-                                position -= last_update_time < 0 ? 0 : time_past / 1000 * speed;
-                                last_update_time = Date.now();
-                                if(Math.abs(position) > moveDistance) {
-                                    play_end = true;
-                                    position = 0;
-                                }
-                            } else if(time_past >= pauseAfterFinish) {
-                                play_end = false;
-                                last_update_time = Date.now();
-                            }
-                        }
-                        requestAnimationFrame(move)
-
-                        return function requestUpdate() {
-                            moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10;
-                            last_update_time = Date.now();
-                            play_end = false;
-                            position = 0;
-                        }
-                    }
-
-                    // main page
-                    main.innerHTML = `
-                    <div class='party'>
-                        <div class='party-main'>
-                            <div class='media-container-block'>
-                                <div class='media-container'>
-                                    <div class='music-title-container'>
-                                        <div class='music-title'><div class='music-title-text'></div></div>
-                                        ${VinylFill}
-                                    </div>
-                                    <video id='video-component'></video>
-                                    <audio id='audio-component'></audio>
-                                </div>
-                            </div>
-                            <div class='media-progress-container clickable'>
-                                <div class='media-progress-bar'><div class='progress'></div></div>
-                                <div id='media-progress-node'></div>
-                            </div>
-                            <div class='controllers'>
-                                <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
-                                <div class='controller clickable' id='last' title='上一媒体'>${SkipStartFill}</div>
-                                <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
-                                <div class='controller clickable' id='next' title='下一媒体'>${SkipEndFill}</div>
-                                <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
-                            </div>
-                            <div class='media-volume-container clickable'>
-                                ${VolumeDownFill}
-                                <div class='media-volume-bar'><div class='volume'></div></div>
-                                <div id='media-volume-node'></div>
-                                ${VolumeUpFill}
-                            </div>
-                        </div>
-                        <div id='nav-bar'>
-                            <div class='clickable' id='hamburger-icon'>${List}</div>
-                            <div class='items'>
-                                <div class='item clickable' id='user-center'><div>用户中心</div></div>
-                                <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
-                                <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
-                                <div class='item clickable'><div>管理我的上传</div></div>
-                                <div class='item clickable'><div>新建/加入房间</div></div>
-                                <div class='item clickable' id='logout'><div>退出登录</div></div>
-                            </div>
-                        </div>
-                    </div>`
-
-                    // components on main page
-                    const video_component = document.getElementById('video-component');
-                    const audio_component = document.getElementById('audio-component');
-                    const audio_title_container = document.querySelector('.media-container .music-title-container')
-                    const audio_title = document.querySelector('.media-container .music-title-container .music-title .music-title-text')
-
-                    const setVideoHls = loadHls(video_component, 'video');
-                    const setAudioHls = loadHls(audio_component, 'audio');
-
-                    const toggle_play_btn = document.getElementById('toggle-play')
-                    const how_to_play = document.getElementById('how-to-play')
-
-                    // listeners
-                    video_component.onended = playNext;
-                    audio_component.onended = playNext;
-                    toggle_play_btn.onclick = togglePlay;
-                    document.getElementById('last').onclick = playLast
-                    document.getElementById('next').onclick = playNext
-                    document.getElementById('show-playlist-icon').onclick = () => showPopup(showPlaylist)
-                    how_to_play.onclick = function() {
-                        if(!playStates.order.length) return;
-                        const idx = PLAY_WAYS.indexOf(playStates.how)
-                        playStates.how = PLAY_WAYS[idx === PLAY_WAYS.length - 1 ? 0 : idx + 1]
-                        how_to_play.innerHTML = 
-                            playStates.how  === 'playlist' ? ListUl :
-                            playStates.how  === 'single' ? RepeatOne : 
-                            playStates.how  === 'random' ? Shuffle : Repeat
-                        
-                        if(playStates.how === 'random') {
-                            playStates.random_order = shuffle(playStates.order)
-                        }
-                    }
-                    window.addEventListener('resize', setInteractableProgressBarWidth);
-                    document.addEventListener('keydown', keyboardControl)
-                    const [calculateMediaProgress, updateMediaProgressWidth] = interactableProgressBar('progress', (value, type) => {
-                        if(!displaying.elem) return false;
-                        if(type === 'percent') {
-                            displaying.elem.currentTime = displaying.elem.duration * value;
-                        } else {
-                            displaying.elem.currentTime = value;
-                        }
-                        return true;
-                    })
-                    const [calculateMediaVolume, updateMediaVolumeWidth] = interactableProgressBar('volume', (value, type) => {
-                        if(!displaying.elem) return false;
-
-                        displaying.elem.volume = value;
-                        displaying.currentVolume = value;
-                        return true;
-                    })
-                    
-
-                    // nav bar
-                    const nav_bar = document.getElementById('nav-bar');
-                    document.getElementById('hamburger-icon').onclick = () => {
-                        nav_bar.classList.toggle('expanded-nav-bar')
-                    }
-                    
-                    // nav bar items
-                    function uploadMediaFile() {
-                        popupWindow.innerHTML = `
-                        <div id='upload-media-container'>
-                            <div class='upload-file-container'>
-                                <input type='file' name='media-files' id='files-input' class='clickable' multiple>
-                                <div class='show-upload'><span>点击或拖拽文件到此处以上传</span></div>
-                            </div>
-                            <div class='btn-container'>
-                                <button id='upload-btn'>上传</button>
-                                <button id='cancel-btn'>取消</button>
-                            </div>
-                        </div>
-                        `
-
-                        function updateProgress(playlist_name, elem, bgElem, stats) {
-                            let updateAnimation = updateTextScrollAnimation(elem)
-                            let firstUpdate = true;
-                            return function(abort) {
-                                stats.abort = abort;
-                                return function(progress) {
-                                    if(!popupWindowVisibility) {
-                                        if(typeof progress === 'number') return;
+    function submitLogin(evt) {
+        evt.preventDefault();
+        const account = evt.target.account.value;
+        const password = evt.target.password.value;
         
-                                        if(progress === 'finished') showNotification(`[${playlist_name}] 上传完成!`, 'success');
-                                        else if(progress === 'aborted') showNotification(`[${playlist_name}] 上传中断!`, 'error');
-                                        return;
-                                    } else {
-                                        if(typeof progress === 'string') {
-                                            bgElem.style.transform = 'translateX(0)';
-                                            elem.textContent = 
-                                                progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...此过程可能较长, 如需关闭请点击空白处.` :
-                                                progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
-                                                progress === 'aborted' ? `[${playlist_name}] 上传中断!` : '';
-                                            
-                                            if(progress === 'finished') {
-                                                stats.finished = true;
-                                            } else if(progress === 'aborted') {
-                                                bgElem.style.backgroundColor = `red`;
-                                                elem.style.color = `white`;
-                                                stats.finished = true;
-                                            }
-                                            if(updateAnimation) { updateAnimation() } else { updateAnimation = updateTextScrollAnimation(elem) };
-                                                
-                                        } else if(typeof progress === 'number') {
-                                            elem.textContent = `[${playlist_name}] 上传中... ${progress < 10 && '0' || ''}${progress}%`;
-                                            bgElem.style.transform = `translateX(-${100 - progress}%)`
-                                            if(firstUpdate) {
-                                                if(updateAnimation) { updateAnimation() } else { updateAnimation = updateTextScrollAnimation(elem) };
-                                                firstUpdate = false;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+        fetch(`${BASE_URL}/account/login`, {
+            method: 'POST',
+            body: JSON.stringify({account, password}),
+            headers: {'Content-Type': 'application/json'}
+        }).then(async res => {
+            const { result, sessionID } = await res.json();
+            if(result !== 'login-failed') {
+                if(result === 'login-success') showNotification('登陆成功!', 'success')
+                else if(result === 'account-created') showNotification('注册成功, 将为您登录', 'success')
+                Cookies.set('session-id', sessionID, { expires: 365 } );
+                if(evt.target['remember-password'].checked) {
+                    localStorage.setItem('remember-password', true);
+                    localStorage.setItem('account', account);
+                    localStorage.setItem('password', password);
+                } else if(localStorage.getItem('remember-password')) {
+                    localStorage.removeItem('remember-password');
+                    localStorage.removeItem('account');
+                    localStorage.removeItem('password');
+                }
+                // go to party main
+                party();
+            } else {
+                showNotification('密码不正确!', 'err')
+            }
+        })
+    }
 
-                        const uploadMediaContainer = document.getElementById('upload-media-container'),
-                              uploadBtn = document.getElementById('upload-btn'),
-                              cancelBtn = document.getElementById('cancel-btn')
+    main.innerHTML = `
+    <form id='login-form'>
+        <span class='description'>请输入账号密码登录，如果账号不存在将会直接创建</span>
+        <input type='text' name='account' id='login-account' placeholder="请输入您的账号" >
+        <div id='show-password' class='clickable'>${Eye}</div>
+        <input type='password' name='password' id='login-password' placeholder='请输入您的密码' >
+        <div class='remember-password-container'>
+            <input type='checkbox' id='remember-password' name='remember-password'>
+            <span>记住密码</span>
+        </div>
+        <button class='clickable' type='submit'>登录</button>
+    </form>
+    `
 
-                        const selectedFiles = []
+    let password_display = false;
+    const password_elem = document.getElementById('login-password');
+    const show_password_elem = document.getElementById('show-password');
 
-                        const filesInput = document.getElementById('files-input')
-                        filesInput.onchange = evt => {
-                            const files = evt.target.files;
-                            const all_files_index = selectedFiles.length
+    if(localStorage.getItem('remember-password')) {
+        password_elem.value = localStorage.getItem('password');
+        document.getElementById('login-account').value = localStorage.getItem('account');
+        document.getElementById('remember-password').checked = true;
+    }
 
-                            for(var i = 0, j = all_files_index; i < files.length; i ++, j ++) {
-                                const file = files[i];
-                                if(! /^(audio|video)\/.*$/.test(file.type)) {
-                                    showNotification(`[${file.name}]不是视频/音频文件！`, 'err');
-                                    j --;
-                                    continue;
-                                }
-                                const index = j;
+    show_password_elem.onclick = () => {
+        password_display = !password_display;
+        show_password_elem.innerHTML = password_display ? EyeSlash : Eye;
+        password_elem.type = password_display ? 'text' : 'password';
+    }
+    document.getElementById('login-form').onsubmit = submitLogin;
+}
 
-                                const displayElemContainer = document.createElement('div');
-                                displayElemContainer.className = 'progress-bar';
+async function party() {
 
-                                const defaultName = file.name.split('.').slice(0, -1).join('.')
-                                
-                                const renameInput = document.createElement('input')
-                                renameInput.type = 'text';
-                                renameInput.placeholder = defaultName;
-                                renameInput.value = defaultName;
-                                renameInput.oninput = evt => {
-                                    const value = evt.target.value;
-                                    selectedFiles[index].rename = value;
-                                }
+    const sessionID = Cookies.get('session-id')
+    const user_login_validated = await (await fetch(`${BASE_URL}/account/validate-login`,{
+        method: 'POST',
+        body: { sessionID },
+        headers: { 'Content-Type': 'application/json' }
+    })).json();
+    if(!user_login_validated) return;
 
-                                const removeFile = document.createElement('div')
-                                removeFile.className = 'remove-file clickable';
-                                removeFile.innerHTML = XLg;
-                                removeFile.onclick = () => {
-                                    selectedFiles.splice(index, 1, null);
-                                    displayElemContainer.remove();
-                                }
+    // init states
+    const PLAY_WAYS = ['loop', 'single', 'random', 'playlist']
 
-                                displayElemContainer.appendChild(renameInput);
-                                displayElemContainer.appendChild(removeFile);
-                                uploadBtn.parentElement.insertAdjacentElement('beforebegin', displayElemContainer)
+    let displaying = {
+        type: '', elem: null, currentVolume: 0.5
+    }
 
-                                selectedFiles[index] = {
-                                    rename: defaultName, finished: false,
-                                    file, displayElemContainer
-                                }
-                            }
-                        }
+    const playStates = {
+        playlist: {},
+        playing: 0, order: [],
+        how: 'loop', random_order: []
+    }
 
-                        function cleanUp() {
-                            selectedFiles.length = 0;
-                            closePopup();
-                        }
+    // functions
+    function loadHls(bound_elem, type) {
+        const hls = Hls.isSupported() ?
+            new Hls() : (function(){
+                showNotification('您的浏览器不支持通过HLS播放!', 'error')
+                Cookies.remove('session-id')
+                askLogin();
+            })();
 
-                        uploadBtn.onclick = () => {
-                            filesInput.disabled = true;
-                            const finishBtn = document.createElement('button');
-                            finishBtn.onclick = () => {
-                                if(!selectedFiles.filter(e=>!e.finished).length) {
-                                    cleanUp()
-                                } else {
-                                    showNotification('还有未完成上传的文件!', 'err');
-                                }
-                            }
-                            finishBtn.textContent = '完成';
-                            uploadBtn.insertAdjacentElement('beforebegin', finishBtn)
-                            uploadBtn.remove();
-                            cancelBtn.onclick = () => {
-                                const isAllFinished = !selectedFiles.filter(e=>!e.finished).length
-                                if(!isAllFinished) {
-                                    selectedFiles.forEach(e=>{
-                                        e && e.abort && e.abort();
-                                    })
-                                    cancelBtn.onclick = cleanUp;
-                                } else cleanUp();
-                            }
+        hls.attachMedia(bound_elem);
 
-                            selectedFiles.forEach(e=>{
-                                if(!e) return;
+        return (url, startPlay = true)=>{
+            hls.loadSource(url);
+            if(displaying.type !== type) {
+                if(displaying.elem) {
+                    displaying.elem.style.display = 'none';
+                    displaying.elem.pause();
+                    displaying.type = type;
+                }
+                displaying.elem = bound_elem;
+                bound_elem.style.display = 'block';
+            }
+            startPlay && bound_elem.play();
+            togglePlay(true, true)
+            bound_elem.volume = displaying.currentVolume;
+            calculateMediaVolume('progress', {value: displaying.currentVolume, total: 1})
+        }
+    }
 
-                                const { file, rename, displayElemContainer } = e;
-                                displayElemContainer.innerHTML = '';
+    function getMediaDuration(media_file, fileType) {
+        return new Promise(resolve => {
+            const media_elem = document.createElement(fileType);
+            const url = URL.createObjectURL(media_file);
+            media_elem.preload = 'metadata';
+            media_elem.onloadedmetadata = () => {
+                resolve(media_elem.duration);
+                URL.revokeObjectURL(url);
+            }
+            media_elem.url = url;
+        })
+    }
 
-                                const progress_background = document.createElement('div')
-                                progress_background.className = 'progress-background';
-                                displayElemContainer.appendChild(progress_background)
+    async function uploadFile(file, rename, progressControl) {
+        let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
+            currentChunkIndex = 0,
+            fileType = file.type.split('/').shift(),
+            uploadReference = -1, 
+            updateProgress = progressControl(abort),
+            retry = 0;
 
-                                const progress_text = document.createElement('div')
-                                progress_text.className = 'progress-text';
-                                progress_text.textContent = `[${rename || file.name}] 等待上传中...`;
-                                displayElemContainer.appendChild(progress_text)
+        async function init() {
+            const estFragments = (await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION;
+            uploadReference = + (await (await fetch('/playlist/pre-upload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sessionID,
+                    title: (rename || file.name),
+                    suffix: file.name.split('.').pop(),
+                    fileType,
+                    estChunks: totalChunks,
+                    estFragments
+                })
+            })).text());
+            cutFileChunk();
+        }
 
-                                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, progress_background, e));
-                            })
-                        }
+        async function abort() {
+            if(currentChunkIndex !== -1 && uploadReference !== -1) {
+                currentChunkIndex = -1;
+                const abort_result = await (await fetch(`${BASE_URL}/playlist/`, {
+                    method: 'DELETE',
+                    body: JSON.stringify({id: uploadReference, sessionID}),
+                    headers: {'Content-Type': 'application/json'},
+                })).json()
+                
+                updateProgress(`aborted${abort_result ? '' : '-failed'}`);
+            }
+        }
 
-                        cancelBtn.onclick = cleanUp;
-                    }
-                    async function showPlaylist() {
-                        popupWindow.innerHTML = `
-                        <div id='playlist-main'>
-                            <div id='loading' class='info'>正在加载播放列表</div>
-                        </div>
-                        `
+        function cutFileChunk() {
+            if(currentChunkIndex < 0) return;
 
-                        const playlist_main = document.getElementById('playlist-main');
-                        await getPlaylist();
-                        document.getElementById('loading').remove();
+            const start = currentChunkIndex * FILE_CHUNK_SIZE;
+            const end = Math.min(start + FILE_CHUNK_SIZE, file.size);
+            sendFileChunk(file.slice(start, end));
+        }
+
+        async function sendFileChunk(chunk) {
+            if(currentChunkIndex < 0) return;
+
+            const isLastChunk = + (currentChunkIndex === totalChunks - 1)
+            const searchParams = new URLSearchParams({
+                sessionID, referenceID: uploadReference, chunkIndex: currentChunkIndex
+            })
+
+            const upload_result = await (await fetch(`${BASE_URL}/playlist/upload-chunk?${searchParams.toString()}`, {
+                method: 'POST',
+                body: chunk,
+                headers: {'Content-Type': 'application/octet-stream'}
+            })).json();
+
+            if(upload_result) {
+                if(isLastChunk) {
+                    currentChunkIndex = -1;
+                    updateProgress('waiting-process');
+                    // TODO: update progress use getMediaUploadStatus
+                } else if(currentChunkIndex >= 0) {
+                    currentChunkIndex ++;
+                    updateProgress(Math.floor((currentChunkIndex / (totalChunks - 1)) * 100))
+                    cutFileChunk();
+                }
+            } else {
+                if(retry < MAX_RETRY) {
+                    retry ++;
+                    cutFileChunk()
+                    updateProgress('retry')
+                } else {
+                    retry = 0;
+                    updateProgress('failed')
+                }
+            }
+        }
+
+        init();
+    }
+
+    async function getPlaylist() {
+        const user_playlists = await (await fetch(
+            `${BASE_URL}/playlist/user-playlist?${new URLSearchParams({sessionID}).toString()}`)
+        ).json()
+        if(user_playlists.length) {
+            for(const media of user_playlists) {
+                playStates.playlist[media.id] = media;
+                playStates.order.includes(media.id) || playStates.order.push(media.id);
+            }
+        }
+        return;
+    }
+
+    function togglePlay(iconOnly, status = 'dynamic') {
+        iconOnly = typeof iconOnly === "boolean" ? iconOnly : false
+        if(displaying.elem) {
+            const isPlaying = 
+                status === 'dynamic' ? 
+                !displaying.elem.paused : !status;
+
+            if(isPlaying) {
+                !iconOnly && displaying.elem.pause();
+                toggle_play_btn.innerHTML = Play;
+                toggle_play_btn.title = '播放';
+            } else {
+                !iconOnly && displaying.elem.play();
+                toggle_play_btn.innerHTML = PauseFill;
+                toggle_play_btn.title = '暂停';
+            }
+        } else if(playStates.order.length && playStates.playing === 0) {
+            playNext();
+        }
+    }
+
+    function playMedia() {
+        const media = playStates.playlist[playStates.playing]
+        const req_query = new URLSearchParams({ sessionID }).toString()
+        media.type === 'audio' ?
+            setAudioHls(`${BASE_URL}/playlist/${media.title}/${media.filename}.m3u8?${req_query}`) :
+            setVideoHls(`${BASE_URL}/playlist/${media.title}/${media.filename}.m3u8?${req_query}`)
+
+        if(document.querySelector("#playlist-main")) {
+            document.querySelector("#playlist-main .media.playing").classList.remove('playing');
+            document.querySelector(`#playlist-main #playlist-play-btn-${media.id}`).classList.add('playing');
+        }
+
+        if(media.type === 'audio') {
+            audio_title_container.style.display = 'block';
+            audio_title.textContent = media.name;
+            audio_title.style.animationName = 'unset';
+            audio_title.style.animationDuration = `${
+                Math.max(
+                    audio_title.clientWidth, 
+                    audio_title_container.clientWidth
+                ) / 70}s`;
+            audio_title.style.animationName = 'music-title-scroll';
+
+        } else {
+            audio_title_container.style.display = 'none';
+        }
+    }
+
+    function playNext() {
+        if(!playStates.order.length) return;
+        if(playStates.how === 'single') {
+            playMedia(); return;
+        }
+        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+        const index = followOrder.indexOf(playStates.playing);
+        // if is last
+        if(index >= followOrder.length - 1) {
+            switch(playStates.how) {
+                case 'playlist': return;
+                case 'random':
+                    playStates.random_order = shuffle(playStates.order);
+                    playStates.playing = playStates.random_order[0];
+                    break;
+                case 'loop':
+                default:
+                    playStates.playing = playStates.order[0];
+                    break;
+            }
+        } else playStates.playing = followOrder[index + 1]
+        playMedia();
+    }
+
+    function playLast() {
+        if(!playStates.order.length) return;
+        if(playStates.how === 'single') {
+            playMedia(); return;
+        }
+        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+        const index = followOrder.indexOf(playStates.playing);
+        // if is first
+        if(index <= 0) {
+            if(playStates.how === 'playlist') return;
+            else playStates.playing = followOrder.slice(-1)[0]
+        } else playStates.playing = followOrder[index - 1];
+        playMedia();
+    }
+
+    function keyboardControl(evt) {
+        switch(evt.key) {
+            case ' ': togglePlay(false); break;
+            case 'ArrowLeft': calculateSetProgressByTime(-5); break;
+            case 'ArrowRight': calculateSetProgressByTime(5); break;
+            case 'ArrowUp': setVolume(0.02); break;
+            case 'ArrowDown': setVolume(-0.02); break;
+            default: break;
+        }
+    }
+
+    function interactableProgressBar(name, setElemProgress) {
+        const states = { mouseDown: false, X: -1, width: -1, locOnPage: -1 }
+        const container = document.querySelector(`.media-${name}-container`);
+        const bar = document.querySelector(`.media-${name}-bar .${name}`)
+        const node = document.getElementById(`media-${name}-node`)
+        // read layout property to force render
+        container.offsetWidth;
+
+        container.onmousedown = () => {states.mouseDown = true}
+        container.onmouseleave = () => {states.mouseDown = false}
+        container.onmouseup = () => {states.mouseDown = false}
+        container.ontouchstart = () => {states.mouseDown = true}
+        container.ontouchend = () => {states.mouseDown = false}
+        container.ontouchcancel = () => {states.mouseDown = false}
+        container.onclick = evt => {
+            states.X = evt.offsetX;
+            calculateProgress('offset');
+        }
+        container.onmousemove = evt => {
+            states.X = evt.offsetX;
+            states.mouseDown && calculateProgress('offset');
+        }
+        container.ontouchmove = evt => {
+            states.X = evt.changedTouches[0].pageX - states.locOnPage;
+            states.mouseDown && calculateProgress('offset');
+        }
+        function setUIProgress() {
+            bar.style.transform = `translateX(${states.X}px)`;
+            node.style.transform = `translateX(${states.X}px)`;
+        }
+
+        function updateWidth() {
+            states.width = container.offsetWidth;
+            states.locOnPage = container.getBoundingClientRect().left
+        }
+
+        function calculateProgress(type, params = {value: null, total: null}) {
+            states.X = Math.max(Math.min(states.width, states.X), 0)
+            if(type === 'progress') {
+                const {value, total} = params;
+                states.X = Math.round(states.width * (value / total));
+            } else {
+                if(!setElemProgress(states.X / states.width, 'percent')) return;
+            }
+            setUIProgress()
+        }
+
+        updateWidth();
+
+        return [calculateProgress, updateWidth]
+    }
+
+    function setInteractableProgressBarWidth() {
+        updateMediaProgressWidth();
+        updateMediaVolumeWidth();
+    }
+    
+    function calculateSetProgressByTime(time = 0) {
+        if(!displaying.elem) return;
+        let duration = displaying.elem.duration,
+            currentTime = displaying.elem.currentTime;
+        time = Math.max(Math.min(currentTime + time, duration), 0);
+        displaying.elem.currentTime = time;
+        calculateMediaProgress('progress', {value: time, total: duration});
+    }
+
+    function setVolume(change) {
+        if(!displaying.elem) return;
+        const newVol = Math.max(Math.min(displaying.currentVolume + change, 1), 0);
+        displaying.elem.volume = newVol;
+        displaying.currentVolume = newVol;
+        calculateMediaVolume('progress', {
+            value:  newVol,
+            total: 1
+        })
+    }
+
+    function updateTextScrollAnimation(elem, parentElem = null, pauseAfterFinish = 2000, speed = 70) {
+        parentElem = parentElem || elem.parentElement;
+
+        let not_available = elem.offsetWidth <= parentElem.offsetWidth,
+            moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10,
+            last_update_time = Date.now(),
+            play_end = false,
+            position = 0;
+        
+        function move() {
+            not_available || requestAnimationFrame(move)
+            const time_past = Date.now() - last_update_time;
+            if(!play_end) {
+                elem.style.transform = `translateX(${Math.floor(position)}px)`;
+                position -= last_update_time < 0 ? 0 : time_past / 1000 * speed;
+                last_update_time = Date.now();
+                if(Math.abs(position) > moveDistance) {
+                    play_end = true;
+                    position = 0;
+                }
+            } else if(time_past >= pauseAfterFinish) {
+                play_end = false;
+                last_update_time = Date.now();
+            }
+        }
+        not_available || requestAnimationFrame(move)
+
+        return function requestUpdate() {
+            const previous_available = not_available;
+            not_available = elem.offsetWidth <= parentElem.offsetWidth;
+            moveDistance = elem.offsetWidth - parentElem.offsetWidth + 10;
+            last_update_time = Date.now();
+            play_end = false;
+            position = 0;
+
+            !not_available && !previous_available && requestAnimationFrame(move)
+        }
+    }
+
+    // main page
+    main.innerHTML = `
+    <div class='party'>
+        <div class='party-main'>
+            <div class='media-container-block'>
+                <div class='media-container'>
+                    <div class='music-title-container'>
+                        <div class='music-title'><div class='music-title-text'></div></div>
+                        ${VinylFill}
+                    </div>
+                    <video id='video-component'></video>
+                    <audio id='audio-component'></audio>
+                </div>
+            </div>
+            <div class='media-progress-container clickable'>
+                <div class='media-progress-bar'><div class='progress'></div></div>
+                <div id='media-progress-node'></div>
+            </div>
+            <div class='controllers'>
+                <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
+                <div class='controller clickable' id='last' title='上一媒体'>${SkipStartFill}</div>
+                <div class='controller clickable' id='toggle-play' title='播放'>${Play}</div>
+                <div class='controller clickable' id='next' title='下一媒体'>${SkipEndFill}</div>
+                <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
+            </div>
+            <div class='media-volume-container clickable'>
+                ${VolumeDownFill}
+                <div class='media-volume-bar'><div class='volume'></div></div>
+                <div id='media-volume-node'></div>
+                ${VolumeUpFill}
+            </div>
+        </div>
+        <div id='nav-bar'>
+            <div class='clickable' id='hamburger-icon'>${List}</div>
+            <div class='items'>
+                <div class='item clickable' id='user-center'><div>用户中心</div></div>
+                <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
+                <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
+                <div class='item clickable'><div>管理我的上传</div></div>
+                <div class='item clickable'><div>新建/加入房间</div></div>
+                <div class='item clickable' id='logout'><div>退出登录</div></div>
+            </div>
+        </div>
+    </div>`
+
+    // components on main page
+    const video_component = document.getElementById('video-component');
+    const audio_component = document.getElementById('audio-component');
+    const audio_title_container = document.querySelector('.media-container .music-title-container')
+    const audio_title = document.querySelector('.media-container .music-title-container .music-title .music-title-text')
+
+    const setVideoHls = loadHls(video_component, 'video');
+    const setAudioHls = loadHls(audio_component, 'audio');
+
+    const toggle_play_btn = document.getElementById('toggle-play')
+    const how_to_play = document.getElementById('how-to-play')
+
+    // listeners
+    video_component.onended = playNext;
+    audio_component.onended = playNext;
+    toggle_play_btn.onclick = togglePlay;
+    document.getElementById('last').onclick = playLast
+    document.getElementById('next').onclick = playNext
+    document.getElementById('show-playlist-icon').onclick = () => showPopup(showPlaylist)
+    how_to_play.onclick = function() {
+        if(!playStates.order.length) return;
+        const idx = PLAY_WAYS.indexOf(playStates.how)
+        playStates.how = PLAY_WAYS[idx === PLAY_WAYS.length - 1 ? 0 : idx + 1]
+        how_to_play.innerHTML = 
+            playStates.how  === 'playlist' ? ListUl :
+            playStates.how  === 'single' ? RepeatOne : 
+            playStates.how  === 'random' ? Shuffle : Repeat
+        
+        if(playStates.how === 'random') {
+            playStates.random_order = shuffle(playStates.order)
+        }
+    }
+    window.addEventListener('resize', setInteractableProgressBarWidth);
+    document.addEventListener('keydown', keyboardControl)
+    const [calculateMediaProgress, updateMediaProgressWidth] = interactableProgressBar('progress', (value, type) => {
+        if(!displaying.elem) return false;
+        if(type === 'percent') {
+            displaying.elem.currentTime = displaying.elem.duration * value;
+        } else {
+            displaying.elem.currentTime = value;
+        }
+        return true;
+    })
+    const [calculateMediaVolume, updateMediaVolumeWidth] = interactableProgressBar('volume', (value, type) => {
+        if(!displaying.elem) return false;
+
+        displaying.elem.volume = value;
+        displaying.currentVolume = value;
+        return true;
+    })
+    
+
+    // nav bar
+    const nav_bar = document.getElementById('nav-bar');
+    document.getElementById('hamburger-icon').onclick = () => {
+        nav_bar.classList.toggle('expanded-nav-bar')
+    }
+    
+    // nav bar items
+    function uploadMediaFile() {
+        popupWindow.innerHTML = `
+        <div id='upload-media-container'>
+            <div class='upload-file-container'>
+                <input type='file' name='media-files' id='files-input' class='clickable' multiple>
+                <div class='show-upload'><span>点击或拖拽文件到此处以上传</span></div>
+            </div>
+            <div class='btn-container'>
+                <button id='upload-btn'>上传</button>
+                <button id='cancel-btn'>取消</button>
+            </div>
+        </div>
+        `
+
+        function updateProgress(playlist_name, elem, bgElem, stats) {
+            let updateAnimation = updateTextScrollAnimation(elem)
+            let firstUpdate = true;
+            return function(abort) {
+                stats.abort = abort;
+                return function(progress) {
+
+                    const msg = 
+                        typeof progress === 'number' ? `[${playlist_name}] 上传中... ${progress < 10 && '0' || ''}${progress}%` :
+                        progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...此过程可能较长, 如需关闭请点击空白处.` :
+                        progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
+                        progress === 'aborted' ? `[${playlist_name}] 上传中断!` : 
+                        progress === 'aborted-failed' ? `[${playlist_name}] 上传无法中断, 请等待上传完成后手动删除!` : 
+                        ''
+
+                    if(!popupWindowVisibility) {
+                        if(typeof progress === 'number') return;
                         
-                        if(playStates.order.length) {
-                            playStates.order.forEach(id=>{
-                                const media = playStates.playlist[id];
+                        showNotification(
+                            msg,
+                            progress === 'aborted' ? 'err' : 
+                            progress === 'aborted-failed' ? 'warn' : 
+                            'success'
+                        )
+                        return;
+                    } else {
+                        elem.textContent = msg;
 
-                                const playBtn = document.createElement('div');
-                                playBtn.className = 'media clickable'
-                                media.id === playStates.playing && playBtn.classList.add('playing')
-                                playBtn.id = `playlist-play-btn-${media.id}`;
+                        if(typeof progress === 'string') {
+                            bgElem.style.transform = 'translateX(0)';
+                            
+                            if(progress === 'finished') {
+                                stats.finished = true;
+                            } else if(progress === 'aborted') {
+                                bgElem.style.backgroundColor = `red`;
+                                elem.style.color = `white`;
+                                stats.finished = true;
+                            } else if(progress === 'aborted-failed') {
+                                bgElem.style.backgroundColor = `gold`;
+                                stats.finished = true;
+                            }
+                            updateAnimation();
 
-                                const playBtnText = document.createElement('div')
-                                playBtnText.className = 'title-text';
-                                playBtnText.textContent = media.name;
-                                
-                                playBtn.onclick = () => {
-                                    const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
-                                    last_playing && last_playing.classList.remove('playing')
-                                    playBtn.classList.add('playing')
-                                    playStates.playing = media.id;
-                                    playMedia();
-                                }
-                                
-                                playBtn.appendChild(playBtnText);
-                                playlist_main.appendChild(playBtn);
-
-                                updateTextScrollAnimation(playBtnText);
-                            })
-                        } else {
-                            playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
+                        } else if(typeof progress === 'number') {
+                            bgElem.style.transform = `translateX(-${100 - progress}%)`
+                            if(firstUpdate) {
+                                updateAnimation();
+                                firstUpdate = false;
+                            }
                         }
                     }
+                }
+            }
+        }
 
-                    document.getElementById('logout').onclick = () => {
-                        // clean up
-                        closePopup();
-                        Cookies.remove('login-account');
-                        window.removeEventListener('resize', setInteractableProgressBarWidth);
-                        document.removeEventListener('keydown', keyboardControl);
-                        // process to login
-                        askLogin();
-                        showNotification('登出成功!', 'success')
-                    }
-                    document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
-                    document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist)
+        const uploadMediaContainer = document.getElementById('upload-media-container'),
+                uploadBtn = document.getElementById('upload-btn'),
+                cancelBtn = document.getElementById('cancel-btn')
 
-                    // init
-                    // always sync progress bar with media progress
-                    function syncMediaProgress() {
-                        logged_in && requestAnimationFrame(syncMediaProgress)
-                        if(displaying.elem && !displaying.elem.paused) {
-                            calculateMediaProgress('progress', {
-                                value: displaying.elem.currentTime,
-                                total: displaying.elem.duration
-                            })
-                        }
-                    }
-                    requestAnimationFrame(syncMediaProgress)
-                    // load playlist info on load
-                    getPlaylist();
+        const selectedFiles = []
+
+        const filesInput = document.getElementById('files-input')
+        filesInput.onchange = evt => {
+            const files = evt.target.files;
+            const all_files_index = selectedFiles.length
+
+            for(var i = 0, j = all_files_index; i < files.length; i ++, j ++) {
+                const file = files[i];
+                if(! /^(audio|video)\/.*$/.test(file.type)) {
+                    showNotification(`[${file.name}]不是视频/音频文件！`, 'err');
+                    j --;
+                    continue;
+                }
+                const index = j;
+
+                const displayElemContainer = document.createElement('div');
+                displayElemContainer.className = 'progress-bar';
+
+                const defaultName = file.name.split('.').slice(0, -1).join('.')
+                
+                const renameInput = document.createElement('input')
+                renameInput.type = 'text';
+                renameInput.placeholder = defaultName;
+                renameInput.value = defaultName;
+                renameInput.oninput = evt => {
+                    const value = evt.target.value;
+                    selectedFiles[index].rename = value;
                 }
 
-                // SECTION: start
-                document.onerror = err => { showNotification(err.message, 'error') }
-                askLogin();
+                const removeFile = document.createElement('div')
+                removeFile.className = 'remove-file clickable';
+                removeFile.innerHTML = XLg;
+                removeFile.onclick = () => {
+                    selectedFiles.splice(index, 1, null);
+                    displayElemContainer.remove();
+                }
+
+                displayElemContainer.appendChild(renameInput);
+                displayElemContainer.appendChild(removeFile);
+                uploadBtn.parentElement.insertAdjacentElement('beforebegin', displayElemContainer)
+
+                selectedFiles[index] = {
+                    rename: defaultName, finished: false,
+                    file, displayElemContainer
+                }
             }
+        }
+
+        function cleanUp() {
+            selectedFiles.length = 0;
+            closePopup();
+        }
+
+        uploadBtn.onclick = () => {
+            filesInput.disabled = true;
+            const finishBtn = document.createElement('button');
+            finishBtn.onclick = () => {
+                if(!selectedFiles.filter(e=>!e.finished).length) {
+                    cleanUp()
+                } else {
+                    showNotification('还有未完成上传的文件!', 'err');
+                }
+            }
+            finishBtn.textContent = '完成';
+            uploadBtn.insertAdjacentElement('beforebegin', finishBtn)
+            uploadBtn.remove();
+            cancelBtn.onclick = () => {
+                const isAllFinished = !selectedFiles.filter(e=>!e.finished).length
+                if(!isAllFinished) {
+                    selectedFiles.forEach(e=>{
+                        e && e.abort && e.abort();
+                    })
+                    cancelBtn.onclick = cleanUp;
+                } else cleanUp();
+            }
+
+            selectedFiles.forEach(e=>{
+                if(!e) return;
+
+                const { file, rename, displayElemContainer } = e;
+                displayElemContainer.innerHTML = '';
+
+                const progress_background = document.createElement('div')
+                progress_background.className = 'progress-background';
+                displayElemContainer.appendChild(progress_background)
+
+                const progress_text = document.createElement('div')
+                progress_text.className = 'progress-text';
+                progress_text.textContent = `[${rename || file.name}] 等待上传中...`;
+                displayElemContainer.appendChild(progress_text)
+
+                uploadFile(file, rename, updateProgress(rename||file.name, progress_text, progress_background, e));
+            })
+        }
+
+        cancelBtn.onclick = cleanUp;
+    }
+    async function showPlaylist() {
+        popupWindow.innerHTML = `
+        <div id='playlist-main'>
+            <div id='loading' class='info'>正在加载播放列表</div>
+        </div>
+        `
+
+        const playlist_main = document.getElementById('playlist-main');
+        await getPlaylist();
+        document.getElementById('loading').remove();
+        
+        if(playStates.order.length) {
+            playStates.order.forEach(id=>{
+                const media = playStates.playlist[id];
+
+                const playBtn = document.createElement('div');
+                playBtn.className = 'media clickable'
+                media.id === playStates.playing && playBtn.classList.add('playing')
+                playBtn.id = `playlist-play-btn-${media.id}`;
+
+                const playBtnText = document.createElement('div')
+                playBtnText.className = 'title-text';
+                playBtnText.textContent = media.title;
+                
+                playBtn.onclick = () => {
+                    const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
+                    last_playing && last_playing.classList.remove('playing')
+                    playBtn.classList.add('playing')
+                    playStates.playing = media.id;
+                    playMedia();
+                }
+                
+                playBtn.appendChild(playBtnText);
+                playlist_main.appendChild(playBtn);
+
+                updateTextScrollAnimation(playBtnText);
+            })
+        } else {
+            playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
+        }
+    }
+
+    document.getElementById('logout').onclick = () => {
+        // clean up
+        closePopup();
+        Cookies.remove('login-account');
+        window.removeEventListener('resize', setInteractableProgressBarWidth);
+        document.removeEventListener('keydown', keyboardControl);
+        // process to login
+        askLogin();
+        showNotification('登出成功!', 'success')
+    }
+    document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
+    document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist)
+    document.getElementById('user-center').onclick = () => {console.log(displaying.elem.duration)}
+
+    // init
+    // always sync progress bar with media progress
+    function syncMediaProgress() {
+        logged_in && requestAnimationFrame(syncMediaProgress)
+        if(displaying.elem && !displaying.elem.paused) {
+            calculateMediaProgress('progress', {
+                value: displaying.elem.currentTime,
+                total: displaying.elem.duration
+            })
+        }
+    }
+    requestAnimationFrame(syncMediaProgress)
+    // load playlist info on load
+    getPlaylist();
+}
+
+// SECTION: start
+document.onerror = err => { showNotification(err.message, 'error') }
+askLogin();
+}
         </script>
         <style type="text/css">
-            /* global */
-
-            body {
-                margin: 0;
-                padding: 0;
-            }
-
-            div {
-                display: block;
-                box-sizing: border-box;
-            }
-
-            #main {
-                width: 100vw;
-                height: 100dvh;
-                max-height: --webkit-fill-available;
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1;
-                overflow-y: auto;
-            }
-
-            .clickable:hover {cursor: pointer;}
-
-            @media screen and (min-width: 1024px) {
-                ::-webkit-scrollbar {width: 7px;}
-                ::-webkit-scrollbar-track {background-color: rgb(240, 240, 240);}
-                ::-webkit-scrollbar-thumb {background-color: rgb(160, 160, 160); border-radius: 3px;}
-                ::-webkit-scrollbar-thumb:hover {background-color: grey;}
-            }
-
-            /* notifications */
-
-            #popup-container,
-            #notification-container {
-                width: 100vw;
-                height: 100dvh;
-                position: fixed;
-                top: 0;
-                left: 0;
-                pointer-events: none;
-            }
-            #notification-container {
-                z-index: 100;
-                --notification-margin: 20px;
-            }
-
-            #notification-container .notification {
-                position: relative;
-                top: 100%;
-                transition-duration: .5s;
-                margin: auto;
-                margin-bottom: var(--notification-margin);
-                width: 20%;
-                height: fit-content;
-                padding: 20px;
-                color: white;
-                z-index: 5;
-                pointer-events: initial;
-                border-radius: 7px;
-                font-size: 15px;
-                text-align: center;
-            }
-            #notification-container .info { background-color: dodgerblue; }
-            #notification-container .success { background-color: limegreen; }
-
-            #notification-container .err,
-            #notification-container .error { background-color: red; }
-
-            #notification-container .warn,
-            #notification-container .warning { background-color: gold; text-shadow: 1px 1px 2px black; }
-            
-            /* popup */
-            #popup-container {
-                z-index: 50;
-                transition-duration: .3s;
-            }
-            #popup-container #popup-window {
-                position: absolute;
-                transform: scale(0);
-                transform-origin: center;
-                transition-duration: .3s;
-                width: 50%;
-                height: 50%;
-                margin: 15dvh 25%;
-                background-color: white;
-                border: 1px solid gray;
-                border-radius: 7px;
-                pointer-events: initial;
-                overflow-y: auto;
-                padding: 20px;
-            }
-
-            /* login */
-
-            #login-form {
-                --input-width: 25vw;
-                --input-height: 50px;
-                --show-pass-icon-height: 25px;
-
-                width: fit-content;
-                max-width: calc(var(--input-width) + 30px);
-                height: fit-content;
-                display: block;
-                position: relative;
-                margin: auto;
-                margin-top: 20dvh;
-                text-align: center;
-                margin-bottom: 50px;
-            }
-
-            #login-form input:not(input[type='checkbox']) {
-                width: var(--input-width);
-                height: var(--input-height);
-                border: 1px solid black;
-                border-radius: 10px;
-                display: block;
-                margin: 20px auto;
-                padding: 0 20px;
-                box-sizing: border-box;
-            }
-            #login-form input:focus {outline: none;}
-
-            #login-form #show-password {
-                position: absolute;
-                height: var(--input-height);
-                width: var(--input-height);
-                margin-left: calc(var(--input-width) - var(--input-height));
-                padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
-            }
-
-            #login-form #show-password i {
-                display: block;
-            }
-            
-            #login-form .remember-password-container {
-                display: flex;
-                align-items: center;
-                margin-bottom: 20px;
-                align-items: center;
-            }
-
-            #login-form .remember-password-container input {
-                display: inline-block;
-                margin: auto;
-                margin-right: 5px;
-                width: 20px;
-                height: 20px;
-            }
-            #login-form .remember-password-container span {
-                display: inline-block;
-                margin: auto;
-                margin-left: 5px;
-            }
-
-            #login-form button {
-                width: calc(var(--input-width) - 50px);
-                height: calc(var(--input-height) - 10px);
-                box-sizing: border-box;
-                border-radius: 10px;
-                border: 1px solid black;
-                background-color: red;
-                color: white;
-                font-size: 17px;
-                transition-duration: .5s;
-            }
-            #login-form button:hover {
-                background-color: crimson;
-            }
-
-            /* party */
-            .party {
-                --nav-bar-width: 50px;
-                --nav-bar-item-width: 200px;
-                --nav-bar-left-padding: 35px;
-                --nav-bar-right-padding: 5px;
-                --media-container-height: 500px;
-                --controllers-height: 30px;
-                
-                position: fixed;
-                height: 100%;
-                width: 100%;
-            }
-            
-            .party #nav-bar {
-                width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-padding) + var(--nav-bar-right-padding)));
-                height: 100%;
-                position: absolute;
-                top: 0;
-                left: 0;
-                border-right: 1px solid grey;
-                padding: 50px var(--nav-bar-right-padding) 0px var(--nav-bar-left-padding);
-                transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
-                transition-duration: .5s;
-                z-index: 5;
-                overflow-y: auto;
-                background-color: white;
-            }
-
-            .party .expanded-nav-bar {
-                transform: unset !important;
-            }
-
-            .party #nav-bar #hamburger-icon {
-                width: 40px;
-                height: 40px;
-                color: grey;
-                position: absolute;
-                right: 5px;
-                top: 5px;
-            }
-
-            .party #nav-bar #hamburger-icon i {
-                font-size: 26px;
-                margin: 7px;
-            }
-
-            .party #nav-bar .items {
-                height: calc(100% - 50px);
-                width: fit-content;
-                position: absolute;
-                bottom: 0;
-                scrollbar-width: none;
-                overflow-y: auto;
-            }
-            .party #nav-bar .items::-webkit-scrollbar {display: none;}
-
-            .party #nav-bar .items .item {
-                width: var(--nav-bar-item-width);
-                padding: 10px;
-                border-radius: 7px;
-                min-height: 55px;
-                display: flex;
-                align-items: center;
-            }
-            .party #nav-bar .items .item div {
-                margin: auto;
-            }
-            .party #nav-bar .items .item:hover {
-                background-color: #ededed;
-            }
-
-            .party .party-main {
-                height: fit-content;
-                width: calc(100% - var(--nav-bar-width));
-                position: absolute;
-                left: var(--nav-bar-width);
-                top: 0;
-            }
-
-            .party .media-container-block {
-                margin-top: 10px;
-                position: relative;
-                width: 100%;
-                height: var(--media-container-height);
-            }
-
-            .party .media-container {
-                display: flex;
-                width: 100%;
-                height: 100%;
-                align-items: center;
-            }
-
-            .party .media-container .music-title-container {
-                --music-title-size: calc(var(--media-container-height) - 100px);
-
-                position: relative;
-                margin: auto;
-                width: var(--music-title-size);
-                height: var(--music-title-size);
-            }
-            .party .media-container .music-title-container .music-title {
-                --music-title-content-height: calc(var(--media-container-height) / 4);
-                position: absolute;
-                width: calc(var(--music-title-size) - 50px);
-                text-align: center;
-                color: white;
-                font-size: calc(var(--music-title-content-height) / 2);
-                z-index: 2;
-                height: var(--music-title-content-height);
-                line-height: var(--music-title-content-height);
-                margin-top: calc((var(--music-title-size) - var(--music-title-content-height)) / 2);
-                margin-left: 25px;
-                -webkit-text-stroke: 1px black;
-                overflow: hidden;
-            }
-            .party .media-container .music-title-container .music-title .music-title-text {
-                animation-name: music-title-scroll;
-                animation-iteration-count: infinite;
-                animation-timing-function: linear;
-                text-wrap: nowrap;
-                width: fit-content;
-                user-select: none;
-            }
-            
-            .party .media-container .music-title-container i {
-                font-size: var(--music-title-size);
-                color: rgb(50 50 50);
-                display: block;
-                height: 100%;
-                width: 100%;
-                position: absolute;
-            }
-            .party .media-container .music-title-container i::before {
-                vertical-align: 1em;
-            }
-
-            @keyframes music-title-scroll {
-                from { transform: translateX(var(--music-title-size)); }
-                to { transform: translateX(-100%); }
-            }
-
-            .party .media-container #video-component,
-            .party .media-container #audio-component {
-                max-height: 100%;
-                max-width: 100%;
-                
-                margin: auto;
-                display: none;
-            }
-
-            .party .media-progress-container,
-            .party .media-volume-container {
-                --media-progress-container-padding: 15px;
-                --media-progress-bar-height: 6px;
-
-                position: relative;
-                width: 50%;
-                margin: auto;
-                margin-bottom: 20px;
-                height: calc(var(--media-progress-container-padding) * 2 + var(--media-progress-bar-height));
-                padding: var(--media-progress-container-padding) 0px;
-                user-select: none;
-                
-                --media-progress-bar-elem-width: 100%;
-            }
-
-            .party .media-volume-container { width: 30%; margin-top: 20px; }
-
-            .party .media-progress-bar,
-            .party .media-volume-bar {
-                position: absolute;
-                width: var(--media-progress-bar-elem-width);
-                height: var(--media-progress-bar-height);
-                background-color: lightgray;
-                border-radius: 10px;
-                overflow: hidden;
-                pointer-events: none;
-            }
-
-            .party .media-progress-bar .progress,
-            .party .media-volume-bar .volume {
-                position: absolute;
-                width: var(--media-progress-bar-elem-width);
-                height: var(--media-progress-bar-height);
-                border-radius: 10px;
-                background-color: red;
-                transform-origin: right center;
-                left: calc(0px - var(--media-progress-bar-elem-width));
-            }
-
-            .party #media-progress-node,
-            .party #media-volume-node {
-                position: absolute;
-                left: -7px;
-                pointer-events: none;
-            }
-
-            .party #media-volume-node,
-            .party #media-progress-node {
-                top: 11px;
-                width: 14px;
-                height: 14px;
-                background-color: white;
-                border: 1px solid black;
-                border-radius: 15px;
-            }
-
-            .party .media-volume-container i {
-                position: absolute;
-                font-size: 21px;
-                top: 3px;
-                left: -30px;
-            }
-            .party .media-volume-container i:last-child {
-                right: -30px;
-                left: unset;
-            }
-            .party .media-volume-container i:hover {
-                cursor: default;
-            }
-
-            .party .controllers {
-                margin-top: 10px;
-                position: relative;
-                width: 100%;
-                height: fit-content;
-                text-align: center;
-                display: flex;
-                align-items: center;
-            }
-
-            .party .controllers .controller {
-                display: inline-block;
-                margin: 0px 5px;
-            }
-            .party .controllers .controller:first-child {
-                margin-left: auto;
-            }
-            .party .controllers .controller:last-child {
-                margin-right: auto;
-            }
-
-            .party .controllers .controller i {
-                font-size: var(--controllers-height);
-                line-height: var(--controllers-height);
-            }
-            .party .controllers .controller.sub-icon i {
-                font-size: calc(var(--controllers-height) - 10px);
-            }
-
-            /* popup windows */
-            #upload-media-container .upload-file-container {
-                position: relative;
-                margin: auto;
-                width: 100%;
-                height: 300px;
-                border: 20px dashed lightgray;
-                border-radius: 10px;
-            }
-            #upload-media-container .upload-file-container .show-upload,
-            #upload-media-container .upload-file-container #files-input {
-                width: 100%;
-                height: 100%;
-                position: absolute;
-                left: 0;
-                top: 0;
-                border-radius: inherit;
-            }
-
-            #upload-media-container .upload-file-container .show-upload span {
-                display: block;
-                margin: auto;
-                font-size: 30px;
-                font-weight: 500;
-                color: gray;
-            }
-
-            #upload-media-container .upload-file-container .show-upload {
-                z-index: 1;
-                display: flex;
-                align-items: center;
-            }
-
-            #upload-media-container .upload-file-container #files-input {
-                opacity: 0;
-                z-index: 2;
-                box-sizing: border-box;
-            }
-
-            #upload-media-container .progress-bar {
-                --progress-bar-height: 40px;
-
-                width: 100%;
-                height: var(--progress-bar-height);
-                border-radius: 10px;
-                border: 1px solid lightgray;
-                margin: auto;
-                margin-top: 20px;
-                position: relative;
-                overflow: hidden;
-            }
-
-            #upload-media-container .progress-bar .progress-text,
-            #upload-media-container .progress-bar input,
-            #upload-media-container .progress-bar .progress-background {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                height: 100%;
-                z-index: 2;
-                border: unset;
-                padding: 0px 20px;
-                border-radius: inherit;
-                box-sizing: border-box;
-            }
-
-            #upload-media-container .progress-bar .progress-text {
-                line-height: var(--progress-bar-height);
-                user-select: none;
-                text-wrap: nowrap;
-                min-width: 100%;
-                width: fit-content;
-            }
-            #upload-media-container .progress-bar .progress-background {
-                z-index: 1;
-                border-radius: unset;
-                padding: unset;
-                transform: translateX(-100%);
-                background-color: lightgreen;
-            }
-
-            #upload-media-container .progress-bar .remove-file {
-                position: absolute;
-                z-index: 2;
-                right: 0;
-                height: var(--progress-bar-height);
-                width: var(--progress-bar-height);
-                top: 0;
-                display: flex;
-            }
-
-            #upload-media-container .progress-bar .remove-file i {
-                margin: auto;
-            }
-
-            #upload-media-container .btn-container {
-                width: 100%;
-                height: fit-content;
-                margin-top: 20px;
-                display: flex;
-            }
-
-            #upload-media-container .btn-container button {
-                display: inline-block;
-                width: 100%;
-                height: 40px;
-                margin: 0 10px;
-                border-radius: 10px;
-                border: none;
-                background-color: dodgerblue;
-                color: white;
-                font-size: 17px;
-                box-sizing: border-box;
-            }
-            #upload-media-container .btn-container button:hover {cursor: pointer;}
-            #upload-media-container .btn-container button:first-child {
-                margin-left: unset;
-            }
-            #upload-media-container .btn-container button:last-child {
-                margin-right: unset;
-            }
-            
-            #playlist-main {
-                --media-height: 50px;
-                --focus-color: #ededed;
-                padding: 0px 15px;
-            }
-
-            #playlist-main .media {
-                width: 100%;
-                height: var(--media-height);
-                line-height: var(--media-height);
-                border-radius: 5px;
-                padding: 0px 5px;
-                overflow: hidden;
-            }
-            #playlist-main .media .title-text {
-                text-wrap: nowrap;
-                width: fit-content;
-            }
-
-            #playlist-main .media:hover {
-                background-color: var(--focus-color);
-            }
-
-            #playlist-main .playing {
-                background-color: var(--focus-color);
-                color: red;
-            }
-            #playlist-main .playing:hover {
-                background-color: #e0e0e0;
-            }
-
-            #playlist-main .info {
-                text-align: center;
-                font-size: 30px;
-                margin-top: 10vh;
-            }
-
-            /* mobile view */
-            @media screen and (max-width: 1023px) {
-                #notification-container .notification {
-                    width: 50%;
-                    font-size: 40px;
-                    border-radius: 15px;
-                }
-                #login-form {
-                    --input-width: 90vw;
-                    --input-height: 100px;
-                    --show-pass-icon-height: 50px;
-                    font-size: 50px;
-                }
-                #login-form input:not(input[type='checkbox']) {
-                    border-radius: 15px;
-                    padding: 0 40px;
-                    font-size: 35px;
-                }
-                #login-form button {
-                    font-size: 35px;
-                    border-radius: 15px;
-                }
-                #login-form #show-password i::before {
-                    vertical-align: 1em;
-                }
-                #login-form .remember-password-container input {
-                    margin-right: 15px;
-                    width: 40px;
-                    height: 40px;
-                }
-
-                #popup-container #popup-window {
-                    width: 90%;
-                    margin: 25% 5%;
-                    border-radius: 15px;
-                }
-
-                #playlist-main {
-                    --media-height: 100px;
-                }
-
-                #playlist-main .media {
-                    border-radius: 15px;
-                }
-
-                #playlist-main .media .title-text {
-                    font-size: 40px;
-                }
-
-                #playlist-main .info {
-                    font-size: 40px;
-                }
-
-                .party {
-                    --nav-bar-width: 0px;
-                    --media-container-height: 800px;
-                    --controllers-height: 60px;
-                }
-
-                .party #nav-bar {
-                    width: 100%;
-                    height: fit-content;
-                    position: relative;
-                    transform: none;
-                    border-right: unset;
-                    padding: var(--nav-bar-left-padding);
-                    overflow: unset;
-                    transition-duration: unset;
-                }
-
-                .party #nav-bar #hamburger-icon {
-                    display: none;
-                }
-
-                .party #nav-bar .items {
-                    height: fit-content;
-                    width: 100%;
-                    position: relative;
-                }
-
-                .party #nav-bar .items .item {
-                    width: 100%;
-                    padding: 20px;
-                    border-radius: 15px;
-                    font-size: 40px;
-                }
-
-                .party #media-volume-node, .party #media-progress-node {
-                    top: 25px;
-                    width: 25px;
-                    height: 25px;
-                    border-radius: 25px;
-                }
-
-                .party .party-main {
-                    position: relative;
-                }
-
-                .party .controllers .controller {
-                    margin: 0px 30px;
-                }
-
-                .party .media-volume-container i {
-                    font-size: 40px;
-                    top: 8px;
-                    left: -50px;
-                }
-                .party .media-volume-container i:last-child {
-                    right: -50px;
-                }
-                .party .media-progress-container, .party .media-volume-container {
-                    --media-progress-container-padding: 30px;
-                    --media-progress-bar-height: 15px;
-                    width: 80%;
-                }
-                .party .media-volume-container {
-                    width: 50%;
-                }
-                .party .media-container .music-title-container .music-title {
-                    -webkit-text-stroke: 2px black;
-                }
-
-                #upload-media-container .upload-file-container {
-                    height: 500px;
-                }
-
-                #upload-media-container .upload-file-container .show-upload span {
-                    font-size: 50px;
-                }
-                
-                #upload-media-container .progress-bar {
-                    --progress-bar-height: 100px;
-                    border-width: 5px;
-                }
-
-                #upload-media-container .progress-bar .progress-text, 
-                #upload-media-container .progress-bar input {
-                    font-size: 30px;
-                }
-
-                #upload-media-container .progress-bar .remove-file i {
-                    font-size: 30px;
-                }
-
-                #upload-media-container .progress-bar .remove-file i::before {
-                    vertical-align: unset;
-                }
-
-                #upload-media-container .btn-container {
-                    display: block;
-                    margin-top: 30px;
-                }
-
-                #upload-media-container .btn-container button {
-                    margin: unset;
-                    margin-bottom: 20px;
-                    font-size: 30px;
-                    border-radius: 15px;
-                    display: block;
-                    height: 70px;
-                }
-            }
+/* global */
+
+body {
+    margin: 0;
+    padding: 0;
+}
+
+div {
+    display: block;
+    box-sizing: border-box;
+}
+
+#main {
+    width: 100vw;
+    height: 100dvh;
+    max-height: --webkit-fill-available;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    overflow-y: auto;
+}
+
+.clickable:hover {cursor: pointer;}
+
+@media screen and (min-width: 1024px) {
+    ::-webkit-scrollbar {width: 7px;}
+    ::-webkit-scrollbar-track {background-color: rgb(240, 240, 240);}
+    ::-webkit-scrollbar-thumb {background-color: rgb(160, 160, 160); border-radius: 3px;}
+    ::-webkit-scrollbar-thumb:hover {background-color: grey;}
+}
+
+/* notifications */
+
+#popup-container,
+#notification-container {
+    width: 100vw;
+    height: 100dvh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+}
+#notification-container {
+    z-index: 100;
+    --notification-margin: 20px;
+}
+
+#notification-container .notification {
+    position: relative;
+    top: 100%;
+    transition-duration: .5s;
+    margin: auto;
+    margin-bottom: var(--notification-margin);
+    width: 20%;
+    height: fit-content;
+    padding: 20px;
+    color: white;
+    z-index: 5;
+    pointer-events: initial;
+    border-radius: 7px;
+    font-size: 15px;
+    text-align: center;
+}
+#notification-container .info { background-color: dodgerblue; }
+#notification-container .success { background-color: limegreen; }
+
+#notification-container .err,
+#notification-container .error { background-color: red; }
+
+#notification-container .warn,
+#notification-container .warning { background-color: gold; text-shadow: 1px 1px 2px black; }
+
+/* popup */
+#popup-container {
+    z-index: 50;
+    transition-duration: .3s;
+}
+#popup-container #popup-window {
+    position: absolute;
+    transform: scale(0);
+    transform-origin: center;
+    transition-duration: .3s;
+    width: 50%;
+    height: 50%;
+    margin: 15dvh 25%;
+    background-color: white;
+    border: 1px solid gray;
+    border-radius: 7px;
+    pointer-events: initial;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* login */
+
+#login-form {
+    --input-width: 25vw;
+    --input-height: 50px;
+    --show-pass-icon-height: 25px;
+
+    width: fit-content;
+    max-width: calc(var(--input-width) + 30px);
+    height: fit-content;
+    display: block;
+    position: relative;
+    margin: auto;
+    margin-top: 20dvh;
+    text-align: center;
+    margin-bottom: 50px;
+}
+
+#login-form input:not(input[type='checkbox']) {
+    width: var(--input-width);
+    height: var(--input-height);
+    border: 1px solid black;
+    border-radius: 10px;
+    display: block;
+    margin: 20px auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+#login-form input:focus {outline: none;}
+
+#login-form #show-password {
+    position: absolute;
+    height: var(--input-height);
+    width: var(--input-height);
+    margin-left: calc(var(--input-width) - var(--input-height));
+    padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
+}
+
+#login-form #show-password i {
+    display: block;
+}
+
+#login-form .remember-password-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    align-items: center;
+}
+
+#login-form .remember-password-container input {
+    display: inline-block;
+    margin: auto;
+    margin-right: 5px;
+    width: 20px;
+    height: 20px;
+}
+#login-form .remember-password-container span {
+    display: inline-block;
+    margin: auto;
+    margin-left: 5px;
+}
+
+#login-form button {
+    width: calc(var(--input-width) - 50px);
+    height: calc(var(--input-height) - 10px);
+    box-sizing: border-box;
+    border-radius: 10px;
+    border: 1px solid black;
+    background-color: red;
+    color: white;
+    font-size: 17px;
+    transition-duration: .5s;
+}
+#login-form button:hover {
+    background-color: crimson;
+}
+
+/* party */
+.party {
+    --nav-bar-width: 50px;
+    --nav-bar-item-width: 200px;
+    --nav-bar-left-padding: 35px;
+    --nav-bar-right-padding: 5px;
+    --media-container-height: 500px;
+    --controllers-height: 30px;
+    
+    position: fixed;
+    height: 100%;
+    width: 100%;
+}
+
+.party #nav-bar {
+    width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-padding) + var(--nav-bar-right-padding)));
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-right: 1px solid grey;
+    padding: 50px var(--nav-bar-right-padding) 0px var(--nav-bar-left-padding);
+    transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
+    transition-duration: .5s;
+    z-index: 5;
+    overflow-y: auto;
+    background-color: white;
+}
+
+.party .expanded-nav-bar {
+    transform: unset !important;
+}
+
+.party #nav-bar #hamburger-icon {
+    width: 40px;
+    height: 40px;
+    color: grey;
+    position: absolute;
+    right: 5px;
+    top: 5px;
+}
+
+.party #nav-bar #hamburger-icon i {
+    font-size: 26px;
+    margin: 7px;
+}
+
+.party #nav-bar .items {
+    height: calc(100% - 50px);
+    width: fit-content;
+    position: absolute;
+    bottom: 0;
+    scrollbar-width: none;
+    overflow-y: auto;
+}
+.party #nav-bar .items::-webkit-scrollbar {display: none;}
+
+.party #nav-bar .items .item {
+    width: var(--nav-bar-item-width);
+    padding: 10px;
+    border-radius: 7px;
+    min-height: 55px;
+    display: flex;
+    align-items: center;
+}
+.party #nav-bar .items .item div {
+    margin: auto;
+}
+.party #nav-bar .items .item:hover {
+    background-color: #ededed;
+}
+
+.party .party-main {
+    height: fit-content;
+    width: calc(100% - var(--nav-bar-width));
+    position: absolute;
+    left: var(--nav-bar-width);
+    top: 0;
+}
+
+.party .media-container-block {
+    margin-top: 10px;
+    position: relative;
+    width: 100%;
+    height: var(--media-container-height);
+}
+
+.party .media-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+}
+
+.party .media-container .music-title-container {
+    --music-title-size: calc(var(--media-container-height) - 100px);
+
+    position: relative;
+    margin: auto;
+    width: var(--music-title-size);
+    height: var(--music-title-size);
+}
+.party .media-container .music-title-container .music-title {
+    --music-title-content-height: calc(var(--media-container-height) / 4);
+    position: absolute;
+    width: calc(var(--music-title-size) - 50px);
+    text-align: center;
+    color: white;
+    font-size: calc(var(--music-title-content-height) / 2);
+    z-index: 2;
+    height: var(--music-title-content-height);
+    line-height: var(--music-title-content-height);
+    margin-top: calc((var(--music-title-size) - var(--music-title-content-height)) / 2);
+    margin-left: 25px;
+    -webkit-text-stroke: 1px black;
+    overflow: hidden;
+}
+.party .media-container .music-title-container .music-title .music-title-text {
+    animation-name: music-title-scroll;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+    text-wrap: nowrap;
+    width: fit-content;
+    user-select: none;
+}
+
+.party .media-container .music-title-container i {
+    font-size: var(--music-title-size);
+    color: rgb(50 50 50);
+    display: block;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+}
+.party .media-container .music-title-container i::before {
+    vertical-align: 1em;
+}
+
+@keyframes music-title-scroll {
+    from { transform: translateX(var(--music-title-size)); }
+    to { transform: translateX(-100%); }
+}
+
+.party .media-container #video-component,
+.party .media-container #audio-component {
+    max-height: 100%;
+    max-width: 100%;
+    
+    margin: auto;
+    display: none;
+}
+
+.party .media-progress-container,
+.party .media-volume-container {
+    --media-progress-container-padding: 15px;
+    --media-progress-bar-height: 6px;
+
+    position: relative;
+    width: 50%;
+    margin: auto;
+    margin-bottom: 20px;
+    height: calc(var(--media-progress-container-padding) * 2 + var(--media-progress-bar-height));
+    padding: var(--media-progress-container-padding) 0px;
+    user-select: none;
+    
+    --media-progress-bar-elem-width: 100%;
+}
+
+.party .media-volume-container { width: 30%; margin-top: 20px; }
+
+.party .media-progress-bar,
+.party .media-volume-bar {
+    position: absolute;
+    width: var(--media-progress-bar-elem-width);
+    height: var(--media-progress-bar-height);
+    background-color: lightgray;
+    border-radius: 10px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.party .media-progress-bar .progress,
+.party .media-volume-bar .volume {
+    position: absolute;
+    width: var(--media-progress-bar-elem-width);
+    height: var(--media-progress-bar-height);
+    border-radius: 10px;
+    background-color: red;
+    transform-origin: right center;
+    left: calc(0px - var(--media-progress-bar-elem-width));
+}
+
+.party #media-progress-node,
+.party #media-volume-node {
+    position: absolute;
+    left: -7px;
+    pointer-events: none;
+}
+
+.party #media-volume-node,
+.party #media-progress-node {
+    top: 11px;
+    width: 14px;
+    height: 14px;
+    background-color: white;
+    border: 1px solid black;
+    border-radius: 15px;
+}
+
+.party .media-volume-container i {
+    position: absolute;
+    font-size: 21px;
+    top: 3px;
+    left: -30px;
+}
+.party .media-volume-container i:last-child {
+    right: -30px;
+    left: unset;
+}
+.party .media-volume-container i:hover {
+    cursor: default;
+}
+
+.party .controllers {
+    margin-top: 10px;
+    position: relative;
+    width: 100%;
+    height: fit-content;
+    text-align: center;
+    display: flex;
+    align-items: center;
+}
+
+.party .controllers .controller {
+    display: inline-block;
+    margin: 0px 5px;
+}
+.party .controllers .controller:first-child {
+    margin-left: auto;
+}
+.party .controllers .controller:last-child {
+    margin-right: auto;
+}
+
+.party .controllers .controller i {
+    font-size: var(--controllers-height);
+    line-height: var(--controllers-height);
+}
+.party .controllers .controller.sub-icon i {
+    font-size: calc(var(--controllers-height) - 10px);
+}
+
+/* popup windows */
+#upload-media-container .upload-file-container {
+    position: relative;
+    margin: auto;
+    width: 100%;
+    height: 300px;
+    border: 20px dashed lightgray;
+    border-radius: 10px;
+}
+#upload-media-container .upload-file-container .show-upload,
+#upload-media-container .upload-file-container #files-input {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-radius: inherit;
+}
+
+#upload-media-container .upload-file-container .show-upload span {
+    display: block;
+    margin: auto;
+    font-size: 30px;
+    font-weight: 500;
+    color: gray;
+}
+
+#upload-media-container .upload-file-container .show-upload {
+    z-index: 1;
+    display: flex;
+    align-items: center;
+}
+
+#upload-media-container .upload-file-container #files-input {
+    opacity: 0;
+    z-index: 2;
+    box-sizing: border-box;
+}
+
+#upload-media-container .progress-bar {
+    --progress-bar-height: 40px;
+
+    width: 100%;
+    height: var(--progress-bar-height);
+    border-radius: 10px;
+    border: 1px solid lightgray;
+    margin: auto;
+    margin-top: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+#upload-media-container .progress-bar .progress-text,
+#upload-media-container .progress-bar input,
+#upload-media-container .progress-bar .progress-background {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    border: unset;
+    padding: 0px 20px;
+    border-radius: inherit;
+    box-sizing: border-box;
+}
+
+#upload-media-container .progress-bar .progress-text {
+    line-height: var(--progress-bar-height);
+    user-select: none;
+    text-wrap: nowrap;
+    min-width: 100%;
+    width: fit-content;
+}
+#upload-media-container .progress-bar .progress-background {
+    z-index: 1;
+    border-radius: unset;
+    padding: unset;
+    transform: translateX(-100%);
+    background-color: lightgreen;
+}
+
+#upload-media-container .progress-bar .remove-file {
+    position: absolute;
+    z-index: 2;
+    right: 0;
+    height: var(--progress-bar-height);
+    width: var(--progress-bar-height);
+    top: 0;
+    display: flex;
+}
+
+#upload-media-container .progress-bar .remove-file i {
+    margin: auto;
+}
+
+#upload-media-container .btn-container {
+    width: 100%;
+    height: fit-content;
+    margin-top: 20px;
+    display: flex;
+}
+
+#upload-media-container .btn-container button {
+    display: inline-block;
+    width: 100%;
+    height: 40px;
+    margin: 0 10px;
+    border-radius: 10px;
+    border: none;
+    background-color: dodgerblue;
+    color: white;
+    font-size: 17px;
+    box-sizing: border-box;
+}
+#upload-media-container .btn-container button:hover {cursor: pointer;}
+#upload-media-container .btn-container button:first-child {
+    margin-left: unset;
+}
+#upload-media-container .btn-container button:last-child {
+    margin-right: unset;
+}
+
+#playlist-main {
+    --media-height: 50px;
+    --focus-color: #ededed;
+    padding: 0px 15px;
+}
+
+#playlist-main .media {
+    width: 100%;
+    height: var(--media-height);
+    line-height: var(--media-height);
+    border-radius: 5px;
+    padding: 0px 5px;
+    overflow: hidden;
+}
+#playlist-main .media .title-text {
+    text-wrap: nowrap;
+    width: fit-content;
+}
+
+#playlist-main .media:hover {
+    background-color: var(--focus-color);
+}
+
+#playlist-main .playing {
+    background-color: var(--focus-color);
+    color: red;
+}
+#playlist-main .playing:hover {
+    background-color: #e0e0e0;
+}
+
+#playlist-main .info {
+    text-align: center;
+    font-size: 30px;
+    margin-top: 10vh;
+}
+
+/* mobile view */
+@media screen and (max-width: 1023px) {
+    #notification-container .notification {
+        width: 50%;
+        font-size: 40px;
+        border-radius: 15px;
+    }
+    #login-form {
+        --input-width: 90vw;
+        --input-height: 100px;
+        --show-pass-icon-height: 50px;
+        font-size: 50px;
+    }
+    #login-form input:not(input[type='checkbox']) {
+        border-radius: 15px;
+        padding: 0 40px;
+        font-size: 35px;
+    }
+    #login-form button {
+        font-size: 35px;
+        border-radius: 15px;
+    }
+    #login-form #show-password i::before {
+        vertical-align: 1em;
+    }
+    #login-form .remember-password-container input {
+        margin-right: 15px;
+        width: 40px;
+        height: 40px;
+    }
+
+    #popup-container #popup-window {
+        width: 90%;
+        margin: 25% 5%;
+        border-radius: 15px;
+    }
+
+    #playlist-main {
+        --media-height: 100px;
+    }
+
+    #playlist-main .media {
+        border-radius: 15px;
+    }
+
+    #playlist-main .media .title-text {
+        font-size: 40px;
+    }
+
+    #playlist-main .info {
+        font-size: 40px;
+    }
+
+    .party {
+        --nav-bar-width: 0px;
+        --media-container-height: 800px;
+        --controllers-height: 60px;
+    }
+
+    .party #nav-bar {
+        width: 100%;
+        height: fit-content;
+        position: relative;
+        transform: none;
+        border-right: unset;
+        padding: var(--nav-bar-left-padding);
+        overflow: unset;
+        transition-duration: unset;
+    }
+
+    .party #nav-bar #hamburger-icon {
+        display: none;
+    }
+
+    .party #nav-bar .items {
+        height: fit-content;
+        width: 100%;
+        position: relative;
+    }
+
+    .party #nav-bar .items .item {
+        width: 100%;
+        padding: 20px;
+        border-radius: 15px;
+        font-size: 40px;
+    }
+
+    .party #media-volume-node, .party #media-progress-node {
+        top: 25px;
+        width: 25px;
+        height: 25px;
+        border-radius: 25px;
+    }
+
+    .party .party-main {
+        position: relative;
+    }
+
+    .party .controllers .controller {
+        margin: 0px 30px;
+    }
+
+    .party .media-volume-container i {
+        font-size: 40px;
+        top: 8px;
+        left: -50px;
+    }
+    .party .media-volume-container i:last-child {
+        right: -50px;
+    }
+    .party .media-progress-container, .party .media-volume-container {
+        --media-progress-container-padding: 30px;
+        --media-progress-bar-height: 15px;
+        width: 80%;
+    }
+    .party .media-volume-container {
+        width: 50%;
+    }
+    .party .media-container .music-title-container .music-title {
+        -webkit-text-stroke: 2px black;
+    }
+
+    #upload-media-container .upload-file-container {
+        height: 500px;
+    }
+
+    #upload-media-container .upload-file-container .show-upload span {
+        font-size: 50px;
+    }
+    
+    #upload-media-container .progress-bar {
+        --progress-bar-height: 100px;
+        border-width: 5px;
+    }
+
+    #upload-media-container .progress-bar .progress-text, 
+    #upload-media-container .progress-bar input {
+        font-size: 30px;
+    }
+
+    #upload-media-container .progress-bar .remove-file i {
+        font-size: 30px;
+    }
+
+    #upload-media-container .progress-bar .remove-file i::before {
+        vertical-align: unset;
+    }
+
+    #upload-media-container .btn-container {
+        display: block;
+        margin-top: 30px;
+    }
+
+    #upload-media-container .btn-container button {
+        margin: unset;
+        margin-bottom: 20px;
+        font-size: 30px;
+        border-radius: 15px;
+        display: block;
+        height: 70px;
+    }
+}
         </style>
         <title>音趴</title>
     </head>
