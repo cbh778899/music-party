@@ -22,26 +22,41 @@ function formatSelectQuery(table, select = '*', whereQuery = null) {
     return { query, params }
 }
 
+async function initDB(db) {
+    await run(db, `CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY NOT NULL,
+        account TEXT, password TEXT
+    )`);
+
+    await run(db, `CREATE TABLE IF NOT EXISTS playlists (
+        id INTEGER PRIMARY KEY NOT NULL, user_id INTEGER,
+        title TEXT, type TEXT, filename TEXT
+    )`);
+
+    await run(db, `CREATE TABLE IF NOT EXISTS uploads (
+        id INTEGER PRIMARY KEY NOT NULL, 
+        user_id INTEGER, playlist_id INTEGER,
+        title TEXT, type TEXT,
+        filename TEXT, suffix TEXT, upload_status TEXT,
+        est_fragments INTEGER, est_chunks INTEGER
+    )`);
+
+    await run(db, `CREATE TABLE IF NOT EXISTS login_records (
+        id INTEGER PRIMARY KEY NOT NULL, 
+        user_id INTEGER, session_id TEXT, exp_date TEXT
+    )`);
+
+    await close(db);
+    return;
+}
+
 exports.openDB = async function (mode = null, init = false) {
     const open_mode = init ? 
         OPEN_READWRITE | OPEN_CREATE :
         mode === null ? OPEN_READWRITE : mode;
 
     const db = await open('./yinpa.db', open_mode);
-    if(init) {
-        await run(db, `CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY NOT NULL,
-            account TEXT, password TEXT
-        )`);
-
-        await run(db, `CREATE TABLE IF NOT EXISTS playlists (
-            id INTEGER PRIMARY KEY NOT NULL, user_id INTEGER,
-            name TEXT, type TEXT, filename TEXT, suffix TEXT, upload_status TEXT
-        )`);
-
-        await close(db);
-        return;
-    }
+    if(init) return await initDB(db);
     return db;
 }
 
