@@ -1,79 +1,174 @@
 const { insert, update, getOne, deleteFrom, getAll } = require("../database")
+const { retrieveUser } = require("./account_actions");
+const { send403, calculateStrHash } = require("../utils");
 const fs = require('fs');
 const exec = require('child_process').exec
 
 const PROCESS_DIR = 'waiting_process',
       FILES_DIR = 'all_files';
 
+let dirName;
+
 fs.existsSync(`./${FILES_DIR}`) || fs.mkdirSync(`./${FILES_DIR}`)
 fs.existsSync(`./${PROCESS_DIR}`) || fs.mkdirSync(`./${PROCESS_DIR}`)
 
+async function finishUpload(filename, id, user_id, title, type, process_file) {
 
+    await update('uploads', { upload_status: 'fragmenting' }, { id })
 
-finishUpload = async function(id, process_file) {
-    const { filename, type } = await exports.getPlaylistInfo(id);
-    return new Promise(resolve => {
-        const playlist_dir = `./${FILES_DIR}/${filename}`
-        fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
-        exec(
-            `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}`+
-            `-map 0:a ${type === 'video' ? '-c:v libx264 ' : ''}-c:a aac -start_number 0 `+
-            `-hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`, 
-            async (err, stdout, stderr) => {
-            
-            if(err) throw err;
-            await update('playlists', { upload_status: 'finished' }, { id })
-            fs.existsSync(process_file) && fs.rmSync(process_file);
-            resolve();
-        })
-    })
-}
+    const playlist_dir = `./${FILES_DIR}/${filename}`
+    fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
 
-exports.getPlaylistInfo = async function(id) {
-    return await getOne('playlists', '*', {id});
-}
-
-exports.getUserPlaylist = async function(id) {
-    return await getAll(
-        'playlists', 
-        ['id', 'name', 'type', 'filename'], 
-        {user_id: id, upload_status: 'finished'}
-    );
-}
-
-exports.upload = async function(userID, name, type, filename, suffix) {
-    const {lastID} = await insert('playlists', {
-        user_id: userID, 
-        name, type, filename, suffix,
-        upload_status: 'pending'
-    });
-    return await getOne('playlists', 'id', {rowid: lastID});
-}
-
-exports.uploadChunk = async function(playlistID, isLastChunk, data) {
-    try {
-        const { filename, suffix, upload_status } = await exports.getPlaylistInfo(+ playlistID);
-        if(upload_status === 'finished') return false;
-        const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
-        fs.appendFileSync(process_file, data)
-        if(+ isLastChunk) {
-            await finishUpload(playlistID, process_file, FILES_DIR);
-            return true;
+    // run fragmenting in child process
+    exec(
+        `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}`+
+        `-map 0:a ${type === 'video' ? '-c:v libx264 ' : ''}-c:a aac -start_number 0 `+
+        `-hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`, 
+        async (err, stdout, stderr) => {
+        
+        if(err) {
+            console.error(err.message);
+            await update('uploads', { upload_status: 'failed' }, { id });
         } else {
-            return true;
+            await update('uploads', { upload_status: 'finished' }, { id });
+            const { lastID } = await insert('playlists', { user_id, title, type, filename });
+            const playlist_id = await getOne('playlists', 'id', { rowid: lastID });
+            await update('uploads', { playlist_id }, { id });
         }
-    } catch(err) {
-        return false;
-    }
+        
+        fs.existsSync(process_file) && fs.unlinkSync(process_file);
+    })
+
+    return true;
 }
 
+function uploadStatus(upload_info) {
+    if(!upload_info) return {};
+    const { id, title, upload_status, est_fragments, filename } = upload_info;
+    const status = {
+        id, title,
+        status: upload_status,
+        progress: 0
+    }
+    if(upload_status === 'fragmenting') {
+        const playlist_dir = `${dirName}/${FILES_DIR}/${filename}`
+        const currentFragments = fs.existsSync(playlist_dir) ? fs.readdirSync(playlist_dir).length - 1 : 0;
+        status.progress = currentFragments / est_fragments;
+    } else if(upload_status === 'finished') {
+        status.progress = 1;
+    }
+    return status;
+}
 
-exports.removePlayList = async function(id) {
-    const {filename, suffix} = await getOne('playlists', ['filename', 'suffix'], {id});
-    const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`;
-    const playlist_dir = `./${FILES_DIR}/${filename}`;
-    fs.existsSync(process_file) && fs.rmSync(process_file)
-    fs.existsSync(playlist_dir) && fs.rmSync(playlist_dir, { recursive: true })
-    await deleteFrom('playlists', {id});
-    return true;
+exports.setDirName = function(dir_name) {
+    dirName = dir_name;
+}
+
+exports.getPlaylistFile = async function (req, res) {
+    const { sessionID, id, requested_filename } = req.params;
+
+    if((await retrieveUser(sessionID)) > 0) {
+        const filename = await getOne('playlists', 'filename', {id: + id});
+        res.sendFile(`${dirName}/${FILES_DIR}/${filename}/${requested_filename}`);
+    } else send403(res);
+}
+
+exports.getUserPlaylist = async function(req, res) {
+    const { sessionID } = req.query
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        res.json( await getAll(
+            'playlists', 
+            ['id', 'title', 'type', 'filename'], 
+            { user_id }
+        ))
+    } else send403(res);
+}
+
+exports.preUpload = async function (req, res) {
+    const { sessionID, title, suffix, fileType, estFragments, estChunks } = req.body;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        const hash_name = calculateStrHash(`${user_id}${title}${Date.now()}`);
+        const {lastID} = await insert('uploads', {
+            user_id,
+            title, suffix,
+            type: fileType, 
+            filename: hash_name,
+            upload_status: 'pending',
+            est_fragments: estFragments,
+            est_chunks: estChunks,
+        })
+        const uploadReference = await getOne('uploads', 'id', {rowid: lastID});
+
+        const process_file = `./${PROCESS_DIR}/${hash_name}.${suffix}`
+        fs.existsSync(process_file) && fs.rmSync(process_file)
+
+        res.send(`${uploadReference}`);
+    } else send403(res)
+}
+
+exports.uploadChunk = async function(req, res) {
+    const { sessionID, referenceID, chunkIndex } = req.query;
+    const data = req.body;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        let result = false;
+        const playlistInfo = await getOne('uploads', '*', { user_id, id: + referenceID })
+        if(playlistInfo) {
+            const { id, type, title, upload_status, filename, est_chunks, suffix } = playlistInfo;
+            const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
+            if(upload_status === 'pending') {
+                result = true;
+                fs.appendFileSync(process_file, data)
+                if(+ chunkIndex === est_chunks - 1) {
+                    await finishUpload(filename, id, user_id, title, type, process_file);
+                }
+            }
+        }
+        res.send(result)
+    } else send403(res)
+}
+
+exports.getMediaUploadStatus = async function(req, res) {
+    const { sessionID, referenceID } = req.query;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        const upload_info = await getOne('uploads', '*', { user_id, id: + referenceID })
+        if(upload_info) {
+            res.json(uploadStatus(upload_info))
+        } else {
+            res.status(400).send({error_msg: 'Media Not Exists'})
+        }
+    } else send403(res);
+}
+
+exports.getUserUploadStatus = async function(req, res) {
+    const { sessionID } = req.query;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        res.json((await getAll('uploads', '*', { user_id })).map(uploadStatus))
+    } else send403(res);
+}
+
+exports.removePlayList = async function(req, res) {
+    const { id, sessionID } = req.body;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        let result = false;
+        const playlistInfo = await getOne('uploads', '*', {id, user_id});
+        if(playlistInfo) {
+            const { upload_status, filename, suffix, playlist_id } = playlistInfo;
+            if(upload_status !== 'fragmenting') {
+                const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`;
+                const playlist_dir = `./${FILES_DIR}/${filename}`;
+                console.log(process_file)
+                fs.existsSync(process_file) && fs.unlinkSync(process_file);
+                fs.existsSync(playlist_dir) && fs.rmSync(playlist_dir, { recursive: true });
+                await deleteFrom('playlists', { playlist_id });
+                await deleteFrom('uploads', { id });
+            }
+        }
+        res.send(result);
+    } else send403(res);
 }
