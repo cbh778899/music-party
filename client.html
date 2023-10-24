@@ -142,7 +142,7 @@ function shuffle(arr) {
 // SECTION: pages
 function askLogin() {
 
-    if(Cookies.get('login-account')) {
+    if(Cookies.get('session-id')) {
         logged_in = true;
         return party();
     }
@@ -217,10 +217,13 @@ async function party() {
     const sessionID = Cookies.get('session-id')
     const user_login_validated = await (await fetch(`${BASE_URL}/account/validate-login`,{
         method: 'POST',
-        body: { sessionID },
+        body: JSON.stringify({ sessionID }),
         headers: { 'Content-Type': 'application/json' }
     })).json();
-    if(!user_login_validated) return;
+    if(!user_login_validated) {
+        Cookies.remove('session-id');
+        askLogin();
+    }
 
     // init states
     const PLAY_WAYS = ['loop', 'single', 'random', 'playlist']
@@ -273,7 +276,7 @@ async function party() {
                 resolve(media_elem.duration);
                 URL.revokeObjectURL(url);
             }
-            media_elem.url = url;
+            media_elem.src = url;
         })
     }
 
@@ -281,13 +284,13 @@ async function party() {
         let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
             currentChunkIndex = 0,
             fileType = file.type.split('/').shift(),
-            uploadReference = -1, 
+            referenceID = -1, 
             updateProgress = progressControl(abort),
             retry = 0;
 
         async function init() {
-            const estFragments = (await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION;
-            uploadReference = + (await (await fetch('/playlist/pre-upload', {
+            const estFragments = Math.ceil((await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION);
+            referenceID = + (await (await fetch('/playlist/pre-upload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -303,11 +306,11 @@ async function party() {
         }
 
         async function abort() {
-            if(currentChunkIndex !== -1 && uploadReference !== -1) {
+            if(currentChunkIndex !== -1 && referenceID !== -1) {
                 currentChunkIndex = -1;
                 const abort_result = await (await fetch(`${BASE_URL}/playlist/`, {
                     method: 'DELETE',
-                    body: JSON.stringify({id: uploadReference, sessionID}),
+                    body: JSON.stringify({id: referenceID, sessionID}),
                     headers: {'Content-Type': 'application/json'},
                 })).json()
                 
@@ -328,7 +331,7 @@ async function party() {
 
             const isLastChunk = + (currentChunkIndex === totalChunks - 1)
             const searchParams = new URLSearchParams({
-                sessionID, referenceID: uploadReference, chunkIndex: currentChunkIndex
+                sessionID, referenceID, chunkIndex: currentChunkIndex
             })
 
             const upload_result = await (await fetch(`${BASE_URL}/playlist/upload-chunk?${searchParams.toString()}`, {
@@ -340,18 +343,28 @@ async function party() {
             if(upload_result) {
                 if(isLastChunk) {
                     currentChunkIndex = -1;
-                    updateProgress('waiting-process');
-                    // TODO: update progress use getMediaUploadStatus
+                    updateProgress('waiting-process', 0);
+                    const interval_id = setInterval(async () => {
+                        const fragment_status = await getUploadProgress(referenceID);
+                        if(!fragment_status.error_msg) {
+                            updateProgress(
+                                fragment_status.status === 'fragmenting' ?
+                                'waiting-process' :
+                                fragment_status.status === 'finished' ?
+                                'finished' : 'upload', Math.floor(fragment_status.progress * 100))
+                            if(fragment_status.status === 'finished') clearInterval(interval_id);
+                        }
+                    }, 1000);
                 } else if(currentChunkIndex >= 0) {
                     currentChunkIndex ++;
-                    updateProgress(Math.floor((currentChunkIndex / (totalChunks - 1)) * 100))
+                    updateProgress('upload', Math.floor((currentChunkIndex / (totalChunks - 1)) * 100))
                     cutFileChunk();
                 }
             } else {
                 if(retry < MAX_RETRY) {
                     retry ++;
                     cutFileChunk()
-                    updateProgress('retry')
+                    updateProgress('retry', retry)
                 } else {
                     retry = 0;
                     updateProgress('failed')
@@ -373,6 +386,17 @@ async function party() {
             }
         }
         return;
+    }
+
+    async function getUploadProgress(referenceID = -1) {
+        const url = referenceID > 0 ? 'media' : 'user'
+        const query = { sessionID }
+        if(referenceID > 0) query.referenceID = referenceID;
+        return await (
+            await fetch(
+                `${BASE_URL}/playlist/${url}-upload-status?${new URLSearchParams(query).toString()}`
+            )
+        ).json()
     }
 
     function togglePlay(iconOnly, status = 'dynamic') {
@@ -398,10 +422,9 @@ async function party() {
 
     function playMedia() {
         const media = playStates.playlist[playStates.playing]
-        const req_query = new URLSearchParams({ sessionID }).toString()
         media.type === 'audio' ?
-            setAudioHls(`${BASE_URL}/playlist/${media.title}/${media.filename}.m3u8?${req_query}`) :
-            setVideoHls(`${BASE_URL}/playlist/${media.title}/${media.filename}.m3u8?${req_query}`)
+            setAudioHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`) :
+            setVideoHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`)
 
         if(document.querySelector("#playlist-main")) {
             document.querySelector("#playlist-main .media.playing").classList.remove('playing');
@@ -410,7 +433,7 @@ async function party() {
 
         if(media.type === 'audio') {
             audio_title_container.style.display = 'block';
-            audio_title.textContent = media.name;
+            audio_title.textContent = media.title;
             audio_title.style.animationName = 'unset';
             audio_title.style.animationDuration = `${
                 Math.max(
@@ -710,54 +733,68 @@ async function party() {
 
         function updateProgress(playlist_name, elem, bgElem, stats) {
             let updateAnimation = updateTextScrollAnimation(elem)
-            let firstUpdate = true;
+            const updatedAnimation = {
+                'upload': false,
+                'waiting-process': false
+            }
             return function(abort) {
                 stats.abort = abort;
-                return function(progress) {
-
+                return function(progress, additional = null) {
                     const msg = 
-                        typeof progress === 'number' ? `[${playlist_name}] 上传中... ${progress < 10 && '0' || ''}${progress}%` :
-                        progress === 'waiting-process' ? `[${playlist_name}] 等待生成分片文件中...此过程可能较长, 如需关闭请点击空白处.` :
+                        progress === 'upload' ? `[${playlist_name}] 上传中... ${additional < 10 && '0' || ''}${additional}%` :
+                        progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${additional < 10 && '0' || ''}${additional}%` :
                         progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
                         progress === 'aborted' ? `[${playlist_name}] 上传中断!` : 
                         progress === 'aborted-failed' ? `[${playlist_name}] 上传无法中断, 请等待上传完成后手动删除!` : 
+                        progress === 'failed' ? `[${playlist_name}] 上传重试${MAX_RETRY}次后失败, 请尝试重新上传或联系管理员!` : 
+                        progress === 'retry' ? `[${playlist_name}] 上传失败, 重试第${additional}次.` : 
                         ''
 
                     if(!popupWindowVisibility) {
-                        if(typeof progress === 'number') return;
+                        if(progress === 'upload' || progress === 'waiting-process') return;
                         
                         showNotification(
                             msg,
-                            progress === 'aborted' ? 'err' : 
-                            progress === 'aborted-failed' ? 'warn' : 
+                            progress === 'aborted' || progress === 'failed' ? 'err' : 
+                            progress === 'aborted-failed' || progress === 'retry' ? 'warn' : 
                             'success'
                         )
                         return;
                     } else {
                         elem.textContent = msg;
 
-                        if(typeof progress === 'string') {
-                            bgElem.style.transform = 'translateX(0)';
-                            
-                            if(progress === 'finished') {
-                                stats.finished = true;
-                            } else if(progress === 'aborted') {
-                                bgElem.style.backgroundColor = `red`;
-                                elem.style.color = `white`;
-                                stats.finished = true;
-                            } else if(progress === 'aborted-failed') {
-                                bgElem.style.backgroundColor = `gold`;
-                                stats.finished = true;
-                            }
-                            updateAnimation();
+                        bgElem.style.backgroundColor = 'lightgreen';
+                        elem.style.color = `black`;
 
-                        } else if(typeof progress === 'number') {
-                            bgElem.style.transform = `translateX(-${100 - progress}%)`
-                            if(firstUpdate) {
+                        if(progress === 'upload' || progress === 'waiting-process') {
+                            bgElem.style.transform = `translateX(-${100 - additional}%)`
+                            if(updatedAnimation[progress]) {
+                                updatedAnimation[progress] = true;
                                 updateAnimation();
-                                firstUpdate = false;
+                            }
+                            return;
+                        } else if(progress === 'retry') {
+                            bgElem.style.backgroundColor = `gold`;
+                            updatedAnimation['upload'] = false;
+                            updatedAnimation['waiting-process'] = false;
+                        } else {
+                            bgElem.style.transform = 'translateX(0)';
+                            stats.finished = true;
+                            switch(progress) {
+                                case 'finished': break;
+                                case 'aborted':
+                                case 'failed':
+                                    bgElem.style.backgroundColor = `red`;
+                                    elem.style.color = `white`;
+                                    break;
+                                case 'aborted-failed':
+                                    bgElem.style.backgroundColor = `gold`;
+                                    break;
+                                default: stats.finished = false;
                             }
                         }
+                        updateAnimation();
+                        return;
                     }
                 }
             }
@@ -910,7 +947,7 @@ async function party() {
     document.getElementById('logout').onclick = () => {
         // clean up
         closePopup();
-        Cookies.remove('login-account');
+        Cookies.remove('session-id');
         window.removeEventListener('resize', setInteractableProgressBarWidth);
         document.removeEventListener('keydown', keyboardControl);
         // process to login
@@ -1492,7 +1529,6 @@ div {
 #playlist-main {
     --media-height: 50px;
     --focus-color: #ededed;
-    padding: 0px 15px;
 }
 
 #playlist-main .media {
