@@ -509,9 +509,9 @@ async function party() {
 
     function interactableProgressBar(name, setElemProgress) {
         const states = { mouseDown: false, X: -1, width: -1, locOnPage: -1 }
-        const container = document.querySelector(`.media-${name}-container`);
-        const bar = document.querySelector(`.media-${name}-bar .${name}`)
-        const node = document.getElementById(`media-${name}-node`)
+        const container = document.querySelector(`#media-${name}-interactive.media-interactive-container`);
+        const bar = document.querySelector(`#media-${name}-interactive.media-interactive-container .bar .bg`)
+        const node = document.querySelector(`#media-${name}-interactive.media-interactive-container #node`)
         // read layout property to force render
         container.offsetWidth;
 
@@ -637,9 +637,9 @@ async function party() {
                     <audio id='audio-component'></audio>
                 </div>
             </div>
-            <div class='media-progress-container clickable'>
-                <div class='media-progress-bar'><div class='progress'></div></div>
-                <div id='media-progress-node'></div>
+            <div id='media-progress-interactive' class='media-interactive-container clickable'>
+                <div class='bar'><div class='bg'></div></div>
+                <div id='node'></div>
             </div>
             <div class='controllers'>
                 <div class='controller clickable sub-icon' id='show-playlist-icon' title='播放列表'>${MusicNoteList}</div>
@@ -648,10 +648,10 @@ async function party() {
                 <div class='controller clickable' id='next' title='下一媒体'>${SkipEndFill}</div>
                 <div class='controller clickable sub-icon' id='how-to-play' title='切换播放方式'>${Repeat}</div>
             </div>
-            <div class='media-volume-container clickable'>
+            <div id='media-volume-interactive' class='media-interactive-container clickable'>
                 ${VolumeDownFill}
-                <div class='media-volume-bar'><div class='volume'></div></div>
-                <div id='media-volume-node'></div>
+                <div class='bar'><div class='bg'></div></div>
+                <div id='node'></div>
                 ${VolumeUpFill}
             </div>
         </div>
@@ -1133,6 +1133,11 @@ div {
 
 .clickable:hover {cursor: pointer;}
 
+@keyframes music-title-scroll {
+from { transform: translateX(var(--music-title-size)); }
+to { transform: translateX(-100%); }
+}
+
 @media screen and (min-width: 1024px) {
     ::-webkit-scrollbar {width: 7px;}
     ::-webkit-scrollbar-track {background-color: rgb(240, 240, 240);}
@@ -1151,55 +1156,59 @@ div {
     left: 0;
     pointer-events: none;
 }
+
 #notification-container {
     z-index: 100;
     --notification-margin: 20px;
+
+    .notification {
+        position: relative;
+        top: 100%;
+        transition-duration: .5s;
+        margin: auto;
+        margin-bottom: var(--notification-margin);
+        width: 20%;
+        height: fit-content;
+        padding: 20px;
+        color: white;
+        z-index: 5;
+        pointer-events: initial;
+        border-radius: 7px;
+        font-size: 15px;
+        text-align: center;
+    }
+
+    .notification.info { background-color: dodgerblue; }
+    .notification.success { background-color: limegreen; }
+
+    .notification.err,
+    .notification.error { background-color: red; }
+
+    .notification.warn,
+    .notification.warning { background-color: gold; text-shadow: 1px 1px 2px black; }
 }
 
-#notification-container .notification {
-    position: relative;
-    top: 100%;
-    transition-duration: .5s;
-    margin: auto;
-    margin-bottom: var(--notification-margin);
-    width: 20%;
-    height: fit-content;
-    padding: 20px;
-    color: white;
-    z-index: 5;
-    pointer-events: initial;
-    border-radius: 7px;
-    font-size: 15px;
-    text-align: center;
-}
-#notification-container .info { background-color: dodgerblue; }
-#notification-container .success { background-color: limegreen; }
-
-#notification-container .err,
-#notification-container .error { background-color: red; }
-
-#notification-container .warn,
-#notification-container .warning { background-color: gold; text-shadow: 1px 1px 2px black; }
 
 /* popup */
 #popup-container {
     z-index: 50;
     transition-duration: .3s;
-}
-#popup-container #popup-window {
-    position: absolute;
-    transform: scale(0);
-    transform-origin: center;
-    transition-duration: .3s;
-    width: 50%;
-    height: 50%;
-    margin: 15dvh 25%;
-    background-color: white;
-    border: 1px solid gray;
-    border-radius: 7px;
-    pointer-events: initial;
-    overflow-y: auto;
-    padding: 20px;
+
+    #popup-window {
+        position: absolute;
+        transform: scale(0);
+        transform-origin: center;
+        transition-duration: .3s;
+        width: 50%;
+        height: 50%;
+        margin: 15dvh 25%;
+        background-color: white;
+        border: 1px solid gray;
+        border-radius: 7px;
+        pointer-events: initial;
+        overflow-y: auto;
+        padding: 20px;
+    }
 }
 
 /* login */
@@ -1218,52 +1227,49 @@ div {
     margin-top: 20dvh;
     text-align: center;
     margin-bottom: 50px;
-}
 
-#login-form input:not(input[type='checkbox']) {
-    width: var(--input-width);
-    height: var(--input-height);
-    border: 1px solid black;
-    border-radius: 10px;
-    display: block;
-    margin: 20px auto;
-    padding: 0 20px;
-    box-sizing: border-box;
+    input:not(input[type='checkbox']) {
+        width: var(--input-width);
+        height: var(--input-height);
+        border: 1px solid black;
+        border-radius: 10px;
+        display: block;
+        margin: 20px auto;
+        padding: 0 20px;
+        box-sizing: border-box;
+    }
+    input:focus {outline: none;}
+    
+    #show-password {
+        position: absolute;
+        height: var(--input-height);
+        width: var(--input-height);
+        margin-left: calc(var(--input-width) - var(--input-height));
+        padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
+    }
+    #show-password i {
+        display: block;
+    }
+    
+    .remember-password-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        align-items: center;
+    }
+    .remember-password-container span {
+        display: inline-block;
+        margin: auto;
+        margin-left: 5px;
+    }
+    .remember-password-container input {
+        display: inline-block;
+        margin: auto;
+        margin-right: 5px;
+        width: 20px;
+        height: 20px;
+    }
 }
-#login-form input:focus {outline: none;}
-
-#login-form #show-password {
-    position: absolute;
-    height: var(--input-height);
-    width: var(--input-height);
-    margin-left: calc(var(--input-width) - var(--input-height));
-    padding: calc((var(--input-height) - var(--show-pass-icon-height)) / 2);
-}
-
-#login-form #show-password i {
-    display: block;
-}
-
-#login-form .remember-password-container {
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-    align-items: center;
-}
-
-#login-form .remember-password-container input {
-    display: inline-block;
-    margin: auto;
-    margin-right: 5px;
-    width: 20px;
-    height: 20px;
-}
-#login-form .remember-password-container span {
-    display: inline-block;
-    margin: auto;
-    margin-left: 5px;
-}
-
 #login-form button {
     width: calc(var(--input-width) - 50px);
     height: calc(var(--input-height) - 10px);
@@ -1279,6 +1285,7 @@ div {
     background-color: crimson;
 }
 
+
 /* party */
 .party {
     --nav-bar-width: 50px;
@@ -1291,400 +1298,393 @@ div {
     position: fixed;
     height: 100%;
     width: 100%;
-}
 
-.party #nav-bar {
-    width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-padding) + var(--nav-bar-right-padding)));
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    border-right: 1px solid grey;
-    padding: 50px var(--nav-bar-right-padding) 0px var(--nav-bar-left-padding);
-    transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
-    transition-duration: .5s;
-    z-index: 5;
-    overflow-y: auto;
-    background-color: white;
-}
+    #nav-bar {
+        width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-padding) + var(--nav-bar-right-padding)));
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        border-right: 1px solid grey;
+        padding: 50px var(--nav-bar-right-padding) 0px var(--nav-bar-left-padding);
+        transform: translateX(calc(0px - (100% - var(--nav-bar-width))));
+        transition-duration: .5s;
+        z-index: 5;
+        overflow-y: auto;
+        background-color: white;
 
-.party .expanded-nav-bar {
-    transform: unset !important;
-}
+        #hamburger-icon {
+            width: 40px;
+            height: 40px;
+            color: grey;
+            position: absolute;
+            right: 5px;
+            top: 5px;
+        }
+        #hamburger-icon i {
+            font-size: 26px;
+            margin: 7px;
+        }
 
-.party #nav-bar #hamburger-icon {
-    width: 40px;
-    height: 40px;
-    color: grey;
-    position: absolute;
-    right: 5px;
-    top: 5px;
-}
-
-.party #nav-bar #hamburger-icon i {
-    font-size: 26px;
-    margin: 7px;
-}
-
-.party #nav-bar .items {
-    height: calc(100% - 50px);
-    width: fit-content;
-    position: absolute;
-    bottom: 0;
-    scrollbar-width: none;
-    overflow-y: auto;
-}
-.party #nav-bar .items::-webkit-scrollbar {display: none;}
-
-.party #nav-bar .items .item {
-    width: var(--nav-bar-item-width);
-    padding: 10px;
-    border-radius: 7px;
-    min-height: 55px;
-    display: flex;
-    align-items: center;
-}
-.party #nav-bar .items .item div {
-    margin: auto;
-}
-.party #nav-bar .items .item:hover {
-    background-color: #ededed;
-}
-
-.party .party-main {
-    height: fit-content;
-    width: calc(100% - var(--nav-bar-width));
-    position: absolute;
-    left: var(--nav-bar-width);
-    top: 0;
-}
-
-.party .media-container-block {
-    margin-top: 10px;
-    position: relative;
-    width: 100%;
-    height: var(--media-container-height);
-}
-
-.party .media-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-}
-
-.party .media-container .music-title-container {
-    --music-title-size: calc(var(--media-container-height) - 100px);
-
-    position: relative;
-    margin: auto;
-    width: var(--music-title-size);
-    height: var(--music-title-size);
-}
-.party .media-container .music-title-container .music-title {
-    --music-title-content-height: calc(var(--media-container-height) / 4);
-    position: absolute;
-    width: calc(var(--music-title-size) - 50px);
-    text-align: center;
-    color: white;
-    font-size: calc(var(--music-title-content-height) / 2);
-    z-index: 2;
-    height: var(--music-title-content-height);
-    line-height: var(--music-title-content-height);
-    margin-top: calc((var(--music-title-size) - var(--music-title-content-height)) / 2);
-    margin-left: 25px;
-    -webkit-text-stroke: 1px black;
-    overflow: hidden;
-}
-.party .media-container .music-title-container .music-title .music-title-text {
-    animation-name: music-title-scroll;
-    animation-iteration-count: infinite;
-    animation-timing-function: linear;
-    text-wrap: nowrap;
-    width: fit-content;
-    user-select: none;
-}
-
-.party .media-container .music-title-container i {
-    font-size: var(--music-title-size);
-    color: rgb(50 50 50);
-    display: block;
-    height: 100%;
-    width: 100%;
-    position: absolute;
-}
-.party .media-container .music-title-container i::before {
-    vertical-align: 1em;
-}
-
-@keyframes music-title-scroll {
-    from { transform: translateX(var(--music-title-size)); }
-    to { transform: translateX(-100%); }
-}
-
-.party .media-container #video-component,
-.party .media-container #audio-component {
-    max-height: 100%;
-    max-width: 100%;
+        .items {
+            height: calc(100% - 50px);
+            width: fit-content;
+            position: absolute;
+            bottom: 0;
+            scrollbar-width: none;
+            overflow-y: auto;
+            
+            ::-webkit-scrollbar {display: none;}
+            
+            .item {
+                width: var(--nav-bar-item-width);
+                padding: 10px;
+                border-radius: 7px;
+                min-height: 55px;
+                display: flex;
+                align-items: center;
+            }
+            .item div {
+                margin: auto;
+            }
+            .item:hover {
+                background-color: #ededed;
+            }
+        }
+    }
+    #nav-bar.expanded-nav-bar {
+        transform: unset !important;
+    }
     
-    margin: auto;
-    display: none;
-}
-
-.party .media-progress-container,
-.party .media-volume-container {
-    --media-progress-container-padding: 15px;
-    --media-progress-bar-height: 6px;
-
-    position: relative;
-    width: 50%;
-    margin: auto;
-    margin-bottom: 20px;
-    height: calc(var(--media-progress-container-padding) * 2 + var(--media-progress-bar-height));
-    padding: var(--media-progress-container-padding) 0px;
-    user-select: none;
+    .party-main {
+        height: fit-content;
+        width: calc(100% - var(--nav-bar-width));
+        position: absolute;
+        left: var(--nav-bar-width);
+        top: 0;
+    }
     
-    --media-progress-bar-elem-width: 100%;
-}
+    .media-container-block {
+        margin-top: 10px;
+        position: relative;
+        width: 100%;
+        height: var(--media-container-height);
+        
+        .media-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            align-items: center;
+            
+            .music-title-container {
+                --music-title-size: calc(var(--media-container-height) - 100px);
+            
+                position: relative;
+                margin: auto;
+                width: var(--music-title-size);
+                height: var(--music-title-size);
 
-.party .media-volume-container { width: 30%; margin-top: 20px; }
+                .music-title {
+                    --music-title-content-height: calc(var(--media-container-height) / 4);
+                    position: absolute;
+                    width: calc(var(--music-title-size) - 50px);
+                    text-align: center;
+                    color: white;
+                    font-size: calc(var(--music-title-content-height) / 2);
+                    z-index: 2;
+                    height: var(--music-title-content-height);
+                    line-height: var(--music-title-content-height);
+                    margin-top: calc((var(--music-title-size) - var(--music-title-content-height)) / 2);
+                    margin-left: 25px;
+                    -webkit-text-stroke: 1px black;
+                    overflow: hidden;
 
-.party .media-progress-bar,
-.party .media-volume-bar {
-    position: absolute;
-    width: var(--media-progress-bar-elem-width);
-    height: var(--media-progress-bar-height);
-    background-color: lightgray;
-    border-radius: 10px;
-    overflow: hidden;
-    pointer-events: none;
-}
+                    .music-title-text {
+                        animation-name: music-title-scroll;
+                        animation-iteration-count: infinite;
+                        animation-timing-function: linear;
+                        text-wrap: nowrap;
+                        width: fit-content;
+                        user-select: none;
+                    }
+                }
+            }
+            
+            #video-component,
+            #audio-component {
+                max-height: 100%;
+                max-width: 100%;
+                
+                margin: auto;
+                display: none;
+            }
+        }
+            
+        .media-container i {
+            font-size: var(--music-title-size);
+            color: rgb(50 50 50);
+            display: block;
+            height: 100%;
+            width: 100%;
+            position: absolute;
 
-.party .media-progress-bar .progress,
-.party .media-volume-bar .volume {
-    position: absolute;
-    width: var(--media-progress-bar-elem-width);
-    height: var(--media-progress-bar-height);
-    border-radius: 10px;
-    background-color: red;
-    transform-origin: right center;
-    left: calc(0px - var(--media-progress-bar-elem-width));
-}
+        }
+        .media-container i::before {
+            vertical-align: 1em;
+        }
+    }
+    
+    .media-interactive-container {
+        --media-progress-container-padding: 15px;
+        --media-progress-bar-height: 6px;
+    
+        position: relative;
+        width: 50%;
+        margin: auto;
+        margin-bottom: 20px;
+        height: calc(var(--media-progress-container-padding) * 2 + var(--media-progress-bar-height));
+        padding: var(--media-progress-container-padding) 0px;
+        user-select: none;
+        
+        --media-progress-bar-elem-width: 100%;
 
-.party #media-progress-node,
-.party #media-volume-node {
-    position: absolute;
-    left: -7px;
-    pointer-events: none;
-}
+        .bar {
+            position: absolute;
+            width: var(--media-progress-bar-elem-width);
+            height: var(--media-progress-bar-height);
+            background-color: lightgray;
+            border-radius: 10px;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        
+        .bg {
+            position: absolute;
+            width: var(--media-progress-bar-elem-width);
+            height: var(--media-progress-bar-height);
+            border-radius: 10px;
+            background-color: red;
+            transform-origin: right center;
+            left: calc(0px - var(--media-progress-bar-elem-width));
+        }
+    
+        #node {
+            position: absolute;
+            left: -7px;
+            pointer-events: none;
+            top: 11px;
+            width: 14px;
+            height: 14px;
+            background-color: white;
+            border: 1px solid black;
+            border-radius: 15px;
+        }
+    }
+    .media-interactive-container i {
+        position: absolute;
+        font-size: 21px;
+        top: 3px;
+        left: -30px;
+    }
+    .media-interactive-container i:last-child {
+        right: -30px;
+        left: unset;
+    }
+    .media-interactive-container i:hover {
+        cursor: default;
+    }
+    .media-interactive-container#media-volume-interactive { width: 30%; margin-top: 20px; }
+    
+    .controllers {
+        margin-top: 10px;
+        position: relative;
+        width: 100%;
+        height: fit-content;
+        text-align: center;
+        display: flex;
+        align-items: center;
 
-.party #media-volume-node,
-.party #media-progress-node {
-    top: 11px;
-    width: 14px;
-    height: 14px;
-    background-color: white;
-    border: 1px solid black;
-    border-radius: 15px;
-}
-
-.party .media-volume-container i {
-    position: absolute;
-    font-size: 21px;
-    top: 3px;
-    left: -30px;
-}
-.party .media-volume-container i:last-child {
-    right: -30px;
-    left: unset;
-}
-.party .media-volume-container i:hover {
-    cursor: default;
-}
-
-.party .controllers {
-    margin-top: 10px;
-    position: relative;
-    width: 100%;
-    height: fit-content;
-    text-align: center;
-    display: flex;
-    align-items: center;
-}
-
-.party .controllers .controller {
-    display: inline-block;
-    margin: 0px 5px;
-}
-.party .controllers .controller:first-child {
-    margin-left: auto;
-}
-.party .controllers .controller:last-child {
-    margin-right: auto;
-}
-
-.party .controllers .controller i {
-    font-size: var(--controllers-height);
-    line-height: var(--controllers-height);
-}
-.party .controllers .controller.sub-icon i {
-    font-size: calc(var(--controllers-height) - 10px);
+        .controller {
+            display: inline-block;
+            margin: 0px 5px;
+        }
+        .controller i {
+            font-size: var(--controllers-height);
+            line-height: var(--controllers-height);
+        }
+        .controller:first-child {
+            margin-left: auto;
+        }
+        .controller:last-child {
+            margin-right: auto;
+        }
+        .controller.sub-icon i {
+            font-size: calc(var(--controllers-height) - 10px);
+        }
+    }
 }
 
 /* popup windows */
-#upload-media-container .upload-file-container {
-    position: relative;
-    margin: auto;
-    width: 100%;
-    height: 300px;
-    border: 20px dashed lightgray;
-    border-radius: 10px;
-}
-#upload-media-container .upload-file-container .show-upload,
-#upload-media-container .upload-file-container #files-input {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    left: 0;
-    top: 0;
-    border-radius: inherit;
-}
+#upload-media-container {
 
-#upload-media-container .upload-file-container .show-upload span {
-    display: block;
-    margin: auto;
-    font-size: 30px;
-    font-weight: 500;
-    color: gray;
-}
+    .upload-file-container {
+        position: relative;
+        margin: auto;
+        width: 100%;
+        height: 300px;
+        border: 20px dashed lightgray;
+        border-radius: 10px;
 
-#upload-media-container .upload-file-container .show-upload {
-    z-index: 1;
-    display: flex;
-    align-items: center;
-}
-
-#upload-media-container .upload-file-container #files-input {
-    opacity: 0;
-    z-index: 2;
-    box-sizing: border-box;
-}
-
-#upload-media-container .progress-bar {
-    --progress-bar-height: 40px;
-
-    width: 100%;
-    height: var(--progress-bar-height);
-    border-radius: 10px;
-    border: 1px solid lightgray;
-    margin: auto;
-    margin-top: 20px;
-    position: relative;
-    overflow: hidden;
-}
-
-#upload-media-container .progress-bar .progress-text,
-#upload-media-container .progress-bar input,
-#upload-media-container .progress-bar .progress-background {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 2;
-    border: unset;
-    padding: 0px 20px;
-    border-radius: inherit;
-    box-sizing: border-box;
-}
-
-#upload-media-container .progress-bar .progress-text {
-    line-height: var(--progress-bar-height);
-    user-select: none;
-    text-wrap: nowrap;
-    min-width: 100%;
-    width: fit-content;
-}
-#upload-media-container .progress-bar .progress-background {
-    z-index: 1;
-    border-radius: unset;
-    padding: unset;
-    transform: translateX(-100%);
-    background-color: lightgreen;
-}
-
-#upload-media-container .progress-bar .remove-file {
-    position: absolute;
-    z-index: 2;
-    right: 0;
-    height: var(--progress-bar-height);
-    width: var(--progress-bar-height);
-    top: 0;
-    display: flex;
-}
-
-#upload-media-container .progress-bar .remove-file i {
-    margin: auto;
-}
-
-#upload-media-container .btn-container {
-    width: 100%;
-    height: fit-content;
-    margin-top: 20px;
-    display: flex;
-}
-
-#upload-media-container .btn-container button {
-    display: inline-block;
-    width: 100%;
-    height: 40px;
-    margin: 0 10px;
-    border-radius: 10px;
-    border: none;
-    background-color: dodgerblue;
-    color: white;
-    font-size: 17px;
-    box-sizing: border-box;
-}
-#upload-media-container .btn-container button:hover {cursor: pointer;}
-#upload-media-container .btn-container button:first-child {
-    margin-left: unset;
-}
-#upload-media-container .btn-container button:last-child {
-    margin-right: unset;
+        .show-upload,
+        #files-input {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            left: 0;
+            top: 0;
+            border-radius: inherit;
+        }
+        
+        .show-upload {
+            z-index: 1;
+            display: flex;
+            align-items: center;
+        }
+        .show-upload span {
+            display: block;
+            margin: auto;
+            font-size: 30px;
+            font-weight: 500;
+            color: gray;
+        }
+        
+        #files-input {
+            opacity: 0;
+            z-index: 2;
+            box-sizing: border-box;
+        }
+    }
+    
+    .progress-bar {
+        --progress-bar-height: 40px;
+    
+        width: 100%;
+        height: var(--progress-bar-height);
+        border-radius: 10px;
+        border: 1px solid lightgray;
+        margin: auto;
+        margin-top: 20px;
+        position: relative;
+        overflow: hidden;
+        
+        .progress-text, input,
+        .progress-background {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            border: unset;
+            padding: 0px 20px;
+            border-radius: inherit;
+            box-sizing: border-box;
+        }
+        
+        .progress-text {
+            line-height: var(--progress-bar-height);
+            user-select: none;
+            text-wrap: nowrap;
+            min-width: 100%;
+            width: fit-content;
+        }
+        .progress-background {
+            z-index: 1;
+            border-radius: unset;
+            padding: unset;
+            transform: translateX(-100%);
+            background-color: lightgreen;
+        }
+        
+        .remove-file {
+            position: absolute;
+            z-index: 2;
+            right: 0;
+            height: var(--progress-bar-height);
+            width: var(--progress-bar-height);
+            top: 0;
+            display: flex;
+        }
+        .remove-file i {
+            margin: auto;
+        }
+    }
+    
+    .btn-container {
+        width: 100%;
+        height: fit-content;
+        margin-top: 20px;
+        display: flex;
+    }
+    .btn-container button {
+        display: inline-block;
+        width: 100%;
+        height: 40px;
+        margin: 0 10px;
+        border-radius: 10px;
+        border: none;
+        background-color: dodgerblue;
+        color: white;
+        font-size: 17px;
+        box-sizing: border-box;
+    }
+    .btn-container button:hover {cursor: pointer;}
+    .btn-container button:first-child { margin-left: unset; }
+    .btn-container button:last-child { margin-right: unset; }
 }
 
 #playlist-main {
     --media-height: 50px;
     --focus-color: #ededed;
-}
+    
+    .media {
+        width: 100%;
+        height: var(--media-height);
+        line-height: var(--media-height);
+        border-radius: 5px;
+        padding: 0px 5px;
+        overflow: hidden;
 
-#playlist-main .media {
-    width: 100%;
-    height: var(--media-height);
-    line-height: var(--media-height);
-    border-radius: 5px;
-    padding: 0px 5px;
-    overflow: hidden;
-}
-#playlist-main .media .title-text {
-    text-wrap: nowrap;
-    width: fit-content;
-}
-
-#playlist-main .media:hover {
-    background-color: var(--focus-color);
-}
-
-#playlist-main .playing {
-    background-color: var(--focus-color);
-    color: red;
-}
-#playlist-main .playing:hover {
-    background-color: #e0e0e0;
+        .title-text {
+            text-wrap: nowrap;
+            width: fit-content;
+        }
+    }
+    .media:hover {
+        background-color: var(--focus-color);
+    }
+    
+    .playing {
+        background-color: var(--focus-color);
+        color: red;
+    }
+    .playing:hover {
+        background-color: #e0e0e0;
+    }
+    
+    .info {
+        text-align: center;
+        font-size: 30px;
+        margin-top: 10vh;
+    }
 }
 
 #upload-manager-main {
+    .info {
+        text-align: center;
+        font-size: 30px;
+        margin-top: 10vh;
+    }
 
     .manage-block {
         margin: 20px 0px;
@@ -1746,41 +1746,12 @@ div {
 
 }
 
-#playlist-main .info {
-    text-align: center;
-    font-size: 30px;
-    margin-top: 10vh;
-}
-
 /* mobile view */
 @media screen and (max-width: 1023px) {
     #notification-container .notification {
         width: 50%;
         font-size: 40px;
         border-radius: 15px;
-    }
-    #login-form {
-        --input-width: 90vw;
-        --input-height: 100px;
-        --show-pass-icon-height: 50px;
-        font-size: 50px;
-    }
-    #login-form input:not(input[type='checkbox']) {
-        border-radius: 15px;
-        padding: 0 40px;
-        font-size: 35px;
-    }
-    #login-form button {
-        font-size: 35px;
-        border-radius: 15px;
-    }
-    #login-form #show-password i::before {
-        vertical-align: 1em;
-    }
-    #login-form .remember-password-container input {
-        margin-right: 15px;
-        width: 40px;
-        height: 40px;
     }
 
     #popup-container #popup-window {
@@ -1789,129 +1760,161 @@ div {
         border-radius: 15px;
     }
 
-    #playlist-main {
-        --media-height: 100px;
-    }
+    #login-form {
+        --input-width: 90vw;
+        --input-height: 100px;
+        --show-pass-icon-height: 50px;
+        font-size: 50px;
 
-    #playlist-main .media {
+        input:not(input[type='checkbox']) {
+            border-radius: 15px;
+            padding: 0 40px;
+            font-size: 35px;
+        }
+        #show-password i::before {
+            vertical-align: 1em;
+        }
+        .remember-password-container input {
+            margin-right: 15px;
+            width: 40px;
+            height: 40px;
+        }
+    }
+    #login-form button {
+        font-size: 35px;
         border-radius: 15px;
     }
 
-    #playlist-main .media .title-text {
-        font-size: 40px;
+    #playlist-main {
+        --media-height: 100px;
+
+        .media {
+            border-radius: 15px;
+            
+            .title-text {
+                font-size: 40px;
+            }
+        }
+
+        .info {
+            font-size: 40px;
+        }
     }
 
-    #playlist-main .info {
-        font-size: 40px;
-    }
 
     .party {
         --nav-bar-width: 0px;
         --media-container-height: 800px;
         --controllers-height: 60px;
-    }
 
-    .party #nav-bar {
-        width: 100%;
-        height: fit-content;
-        position: relative;
-        transform: none;
-        border-right: unset;
-        padding: var(--nav-bar-left-padding);
-        overflow: unset;
-        transition-duration: unset;
-    }
+        #nav-bar {
+            width: 100%;
+            height: fit-content;
+            position: relative;
+            transform: none;
+            border-right: unset;
+            padding: var(--nav-bar-left-padding);
+            overflow: unset;
+            transition-duration: unset;
 
-    .party #nav-bar #hamburger-icon {
-        display: none;
-    }
+            #hamburger-icon {
+                display: none;
+            }
+        
+            .items {
+                height: fit-content;
+                width: 100%;
+                position: relative;
 
-    .party #nav-bar .items {
-        height: fit-content;
-        width: 100%;
-        position: relative;
-    }
-
-    .party #nav-bar .items .item {
-        width: 100%;
-        padding: 20px;
-        border-radius: 15px;
-        font-size: 40px;
-    }
-
-    .party #media-volume-node, .party #media-progress-node {
-        top: 25px;
-        width: 25px;
-        height: 25px;
-        border-radius: 25px;
-    }
-
-    .party .party-main {
-        position: relative;
-    }
-
-    .party .controllers .controller {
-        margin: 0px 30px;
-    }
-
-    .party .media-volume-container i {
-        font-size: 40px;
-        top: 8px;
-        left: -50px;
-    }
-    .party .media-volume-container i:last-child {
-        right: -50px;
-    }
-    .party .media-progress-container, .party .media-volume-container {
-        --media-progress-container-padding: 30px;
-        --media-progress-bar-height: 15px;
-        width: 80%;
-    }
-    .party .media-volume-container {
-        width: 50%;
-    }
-    .party .media-container .music-title-container .music-title {
-        -webkit-text-stroke: 2px black;
-    }
-
-    #upload-media-container .upload-file-container {
-        height: 500px;
-    }
-
-    #upload-media-container .upload-file-container .show-upload span {
-        font-size: 50px;
-    }
+                .item {
+                    width: 100%;
+                    padding: 20px;
+                    border-radius: 15px;
+                    font-size: 40px;
+                }
+            }
+        }
     
-    #upload-media-container .progress-bar {
-        --progress-bar-height: 100px;
-        border-width: 5px;
+        #node {
+            top: 25px !important;
+            width: 25px !important;
+            height: 25px !important;
+            border-radius: 25px !important;
+        }
+    
+        .party-main {
+            position: relative;
+        }
+    
+        .controllers .controller {
+            margin: 0px 30px;
+        }
+    
+        .media-interactive-container {
+            --media-progress-container-padding: 30px;
+            --media-progress-bar-height: 15px;
+            width: 80%;
+        }
+        .media-interactive-container#media-volume-interactive {
+            width: 50%;
+        }
+        .media-interactive-container#media-volume-interactive i {
+            font-size: 40px;
+            top: 8px;
+            left: -50px;
+        }
+        .media-interactive-container#media-volume-interactive i:last-child {
+            left: unset !important;
+            right: -50px !important;
+        }
+        
+        .media-container .music-title-container .music-title {
+            -webkit-text-stroke: 2px black;
+        }
     }
 
-    #upload-media-container .progress-bar .progress-text, 
-    #upload-media-container .progress-bar input {
-        font-size: 30px;
-    }
 
-    #upload-media-container .progress-bar .remove-file i {
-        font-size: 30px;
-    }
+    #upload-media-container{
 
-    #upload-media-container .progress-bar .remove-file i::before {
-        vertical-align: unset;
-    }
+        .upload-file-container {
+            height: 500px;
 
-    #upload-media-container .btn-container {
-        display: block;
-        margin-top: 30px;
-    }
-
-    #upload-media-container .btn-container button {
-        margin: unset;
-        margin-bottom: 20px;
-        font-size: 30px;
-        border-radius: 15px;
-        display: block;
-        height: 70px;
+            .show-upload span {
+                font-size: 50px;
+            }
+        }
+    
+        .progress-bar {
+            --progress-bar-height: 100px;
+            border-width: 5px;
+        
+            .progress-text {
+                font-size: 30px;
+            }
+        
+            .remove-file i {
+                font-size: 30px;
+            }
+            .remove-file i::before {
+                vertical-align: unset;
+            }
+        }
+        .progress-bar input {
+            font-size: 30px;
+        }
+    
+        .btn-container {
+            display: block;
+            margin-top: 30px;
+        }
+        .btn-container button {
+            margin: unset;
+            margin-bottom: 20px;
+            font-size: 30px;
+            border-radius: 15px;
+            display: block;
+            height: 70px;
+        }
     }
 }
         </style>
