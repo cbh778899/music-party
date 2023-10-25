@@ -286,7 +286,7 @@ async function party() {
             fileType = file.type.split('/').shift(),
             referenceID = -1, 
             updateProgress = progressControl(abort),
-            retry = 0;
+            retry = 0, pauseUpdateTill = 0;
 
         async function init() {
             const estFragments = Math.ceil((await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION);
@@ -315,6 +315,9 @@ async function party() {
                 })).json()
                 
                 updateProgress(`aborted${abort_result ? '' : '-failed'}`);
+                if(!abort_result) {
+                    pauseUpdateTill = Date.now() + 5000
+                }
             }
         }
 
@@ -346,14 +349,18 @@ async function party() {
                     updateProgress('waiting-process', 0);
                     const interval_id = setInterval(async () => {
                         const fragment_status = await getUploadProgress(referenceID);
+                        if(pauseUpdateTill) {
+                            if(Date.now() <= pauseUpdateTill) return;
+                            pauseUpdateTill = 0;
+                        }
                         if(!fragment_status.error_msg) {
                             updateProgress(
                                 fragment_status.status === 'fragmenting' ?
                                 'waiting-process' :
                                 fragment_status.status === 'finished' ?
                                 'finished' : 'upload', Math.floor(fragment_status.progress * 100))
-                            if(fragment_status.status === 'finished') clearInterval(interval_id);
                         }
+                        (!popupWindowVisibility || fragment_status.error_msg || fragment_status.status === 'finished') && clearInterval(interval_id)
                     }, 1000);
                 } else if(currentChunkIndex >= 0) {
                     currentChunkIndex ++;
@@ -487,6 +494,9 @@ async function party() {
     }
 
     function keyboardControl(evt) {
+        // disable keyboard control when there's a popup window
+        if(popupWindowVisibility) return;
+
         switch(evt.key) {
             case ' ': togglePlay(false); break;
             case 'ArrowLeft': calculateSetProgressByTime(-5); break;
@@ -651,7 +661,7 @@ async function party() {
                 <div class='item clickable' id='user-center'><div>用户中心</div></div>
                 <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
                 <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
-                <div class='item clickable'><div>管理我的上传</div></div>
+                <div class='item clickable' id='upload-manager'><div>管理我的上传</div></div>
                 <div class='item clickable'><div>新建/加入房间</div></div>
                 <div class='item clickable' id='logout'><div>退出登录</div></div>
             </div>
@@ -768,7 +778,7 @@ async function party() {
 
                         if(progress === 'upload' || progress === 'waiting-process') {
                             bgElem.style.transform = `translateX(-${100 - additional}%)`
-                            if(updatedAnimation[progress]) {
+                            if(!updatedAnimation[progress]) {
                                 updatedAnimation[progress] = true;
                                 updateAnimation();
                             }
@@ -943,6 +953,123 @@ async function party() {
             playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
         }
     }
+    async function uploadManager() {
+        function updateUploadingProgress(elem, displayElem, status, progress) {
+            const progress_percent = Math.floor(progress * 100)
+            elem.textContent = '上传进度: ' +
+                status === 'pending' ? '正在上传文件' : 
+                status === 'fragmenting' ? `正在进行文件分片, 进度${progress_percent}%` : 
+                '上传已完成'
+            displayElem.style.transform = `translateX(-${100-progress_percent}%)`;
+        }
+
+        popupWindow.innerHTML = `
+        <div id='upload-manager-main'>
+            <div id='loading' class='info'>正在加载上传记录</div>
+        </div>`
+
+        const user_upload_progress = await getUploadProgress();
+        document.getElementById('loading').remove();
+        const upload_manager_main = document.getElementById('upload-manager-main');
+        if(user_upload_progress.length) {
+            user_upload_progress.forEach(upload => {
+                let { id, title, status, progress } = upload;
+                let interval_id;
+
+                const manageBlock = document.createElement('div');
+                manageBlock.className = 'manage-block';
+
+                const titleText = document.createElement('input');
+                titleText.className = 'title';
+                titleText.value = title;
+
+                const statusText = document.createElement('div');
+                statusText.className = 'status';
+                
+                if(status !== 'finished') {
+                    interval_id = setInterval(async () => {
+                        const updated_progress = await getUploadProgress(id);
+                        if(!updated_progress.error_msg) {
+                            status = updated_progress.status
+                            progress = updated_progress.progress
+                            updateUploadingProgress(statusText, statusDisplayBarBg, status, progress);
+                        }
+                        (!popupWindowVisibility || updated_progress.error_msg || updated_progress.status === 'finished') && clearInterval(interval_id)
+                    }, 1000);
+                }
+
+                const statusDisplayBar = document.createElement('div');
+                statusDisplayBar.className = 'progress-bar'
+
+                const statusDisplayBarBg = document.createElement('div');
+                statusDisplayBarBg.className = 'progress-bar-bg'
+                statusDisplayBar.appendChild(statusDisplayBarBg);
+
+                const renameBtn = document.createElement('div');
+                renameBtn.className = 'function-btn clickable'
+                renameBtn.textContent = '更新标题'
+                renameBtn.onclick = async () => {
+                    if(titleText.value && titleText.value !== title) {
+                        const update_result = (await fetch(`${BASE_URL}/playlist/update-title`, {
+                            method: 'POST',
+                            body: JSON.stringify({ sessionID, id, title: titleText.value }),
+                            headers: { 'Content-Type': 'application/json' }
+                        })).json()
+                        if(!update_result.error_msg && update_result) {
+                            title = titleText.value;
+                            showNotification(`[${title}] 更新标题成功!`, 'success')
+                            getPlaylist();
+                        } else  {
+                            showNotification(`[${title}] 更新标题失败!`, 'error')
+                        }
+                    } else {
+                        showNotification(`[${title}] 标题未改变!`)
+                    }
+                }
+
+                const deleteBtn = document.createElement('div');
+                deleteBtn.className = 'function-btn clickable danger'
+                deleteBtn.textContent = '删除此文件'
+                let last_click = 0;
+                deleteBtn.onclick = async () => {
+                    if(status !== 'fragmenting') {
+                        if(Date.now() - last_click > 10000) {
+                            showNotification('请再点击一次以确认删除');
+                            last_click = Date.now();
+                        } else {
+                            const delete_result = await (await fetch(`${BASE_URL}/playlist`, {
+                                method: 'DELETE',
+                                body: JSON.stringify({ sessionID, id }),
+                                headers: { 'Content-Type': 'application/json' }
+                            })).json()
+                            if(!delete_result.error_msg && delete_result) {
+                                showNotification(`成功删除 [${title}]!`, 'success');
+                                manageBlock.remove();
+                                getPlaylist();
+                                if(interval_id) clearInterval(interval_id);
+                            } else {
+                                showNotification(`删除 [${title}] 失败!`, 'error');
+                            }
+                        }
+                    } else {
+                        showNotification('文件分片时无法删除, 请等待分片完成!', 'warn')
+                    }
+                }
+
+                manageBlock.appendChild(titleText);
+                manageBlock.appendChild(statusText);
+                manageBlock.appendChild(statusDisplayBar);
+                manageBlock.appendChild(renameBtn);
+                manageBlock.appendChild(deleteBtn);
+                upload_manager_main.appendChild(manageBlock);
+
+                updateUploadingProgress(statusText, statusDisplayBarBg, status, progress);
+            })
+        } else {
+            upload_manager_main.innerHTML = "<div class='info'>暂无上传记录!</div>"
+        }
+
+    }
 
     document.getElementById('logout').onclick = () => {
         // clean up
@@ -956,6 +1083,7 @@ async function party() {
     }
     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
     document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist)
+    document.getElementById('upload-manager').onclick = () => showPopup(uploadManager)
     document.getElementById('user-center').onclick = () => {console.log(displaying.elem.duration)}
 
     // init
@@ -1554,6 +1682,68 @@ div {
 }
 #playlist-main .playing:hover {
     background-color: #e0e0e0;
+}
+
+#upload-manager-main {
+
+    .manage-block {
+        margin: 20px 0px;
+        padding: 20px 5px;
+        border-bottom: 1px dashed grey;
+        
+        .title {
+            width: calc(100% + 10px);
+            height: 50px;
+            padding: 0px 15px;
+            box-sizing: border-box;
+            font-size: 17px;
+            border-radius: 7px;
+            border: 1px solid;
+            margin-left: -5px;
+        }
+    
+        .status {
+            margin: 20px 0px 5px 0px;
+        }
+    
+        .progress-bar {
+            width: 100%;
+            height: 7px;
+            border: 1px solid;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+
+            .progress-bar-bg {
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                transform: -100%;
+                background-color: lightgreen;
+            }
+        }
+    
+        .function-btn {
+            display: inline-block;
+            margin-top: 20px;
+            border-radius: 10px;
+            margin-right: 40px;
+            user-select: none;
+        }
+        .function-btn.danger {
+            color: red;
+        }
+    
+        :first-child {
+            margin-top: unset;
+        }
+    
+        :last-child {
+            border-bottom: unset;
+            margin-bottom: unset;
+        }
+    }
+
 }
 
 #playlist-main .info {
