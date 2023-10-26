@@ -1,4 +1,4 @@
-const { getPlaylistFile, getUserPlaylist, preUpload, uploadChunk, getUserUploadStatus, removePlayList, getMediaUploadStatus, setDirName } = require("../actions/playlist_actions");
+const { getPlaylistFile, getUserPlaylist, preUpload, uploadChunk, getUserUploadStatus, removePlayList, getMediaUploadStatus, setDirName, updateTitle } = require("../actions/playlist_actions");
 const bodyParser = require('body-parser');
 const { tryAction } = require("../utils");
 
@@ -12,6 +12,7 @@ module.exports = (app, express, dirName) => {
     router.post('/upload-chunk', bodyParser.raw({type: 'application/octet-stream', limit: '10mb'}), tryAction(uploadChunk));
     router.get('/user-upload-status', tryAction(getUserUploadStatus));
     router.get('/media-upload-status', tryAction(getMediaUploadStatus));
+    router.post('/update-title', tryAction(updateTitle));
     router.delete('/', tryAction(removePlayList));
 
     app.use('/playlist', router)
