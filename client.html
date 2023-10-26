@@ -237,6 +237,9 @@ async function party() {
         playing: 0, order: [],
         how: 'loop', random_order: []
     }
+    
+    let last_toggled_resize = 0;
+    let manual_update_media_time = false;
 
     // functions
     function loadHls(bound_elem, type) {
@@ -261,9 +264,7 @@ async function party() {
                 bound_elem.style.display = 'block';
             }
             startPlay && bound_elem.play();
-            togglePlay(true, true)
             bound_elem.volume = displaying.currentVolume;
-            calculateMediaVolume('progress', {value: displaying.currentVolume, total: 1})
         }
     }
 
@@ -406,22 +407,9 @@ async function party() {
         ).json()
     }
 
-    function togglePlay(iconOnly, status = 'dynamic') {
-        iconOnly = typeof iconOnly === "boolean" ? iconOnly : false
+    function togglePlay() {
         if(displaying.elem) {
-            const isPlaying = 
-                status === 'dynamic' ? 
-                !displaying.elem.paused : !status;
-
-            if(isPlaying) {
-                !iconOnly && displaying.elem.pause();
-                toggle_play_btn.innerHTML = Play;
-                toggle_play_btn.title = '播放';
-            } else {
-                !iconOnly && displaying.elem.play();
-                toggle_play_btn.innerHTML = PauseFill;
-                toggle_play_btn.title = '暂停';
-            }
+            displaying.elem.paused ? displaying.elem.play() : displaying.elem.pause();
         } else if(playStates.order.length && playStates.playing === 0) {
             playNext();
         }
@@ -495,10 +483,10 @@ async function party() {
 
     function keyboardControl(evt) {
         // disable keyboard control when there's a popup window
-        if(popupWindowVisibility) return;
+        if(popupWindowVisibility || document.activeElement === displaying.elem) return;
 
         switch(evt.key) {
-            case ' ': togglePlay(false); break;
+            case ' ': togglePlay(); break;
             case 'ArrowLeft': calculateSetProgressByTime(-5); break;
             case 'ArrowRight': calculateSetProgressByTime(5); break;
             case 'ArrowUp': setVolume(0.02); break;
@@ -523,15 +511,15 @@ async function party() {
         container.ontouchcancel = () => {states.mouseDown = false}
         container.onclick = evt => {
             states.X = evt.offsetX;
-            calculateProgress('offset');
+            calculateProgress(null, true);
         }
         container.onmousemove = evt => {
             states.X = evt.offsetX;
-            states.mouseDown && calculateProgress('offset');
+            states.mouseDown && calculateProgress(null, true);
         }
         container.ontouchmove = evt => {
             states.X = evt.changedTouches[0].pageX - states.locOnPage;
-            states.mouseDown && calculateProgress('offset');
+            states.mouseDown && calculateProgress(null, true);
         }
         function setUIProgress() {
             bar.style.transform = `translateX(${states.X}px)`;
@@ -543,15 +531,15 @@ async function party() {
             states.locOnPage = container.getBoundingClientRect().left
         }
 
-        function calculateProgress(type, params = {value: null, total: null}) {
+        function calculateProgress(params = {value: null, total: null}, isInside = false) {
             states.X = Math.max(Math.min(states.width, states.X), 0)
-            if(type === 'progress') {
+            if(isInside) {
+                setElemProgress(states.X / states.width);
+            } else {
                 const {value, total} = params;
                 states.X = Math.round(states.width * (value / total));
-            } else {
-                if(!setElemProgress(states.X / states.width, 'percent')) return;
+                setUIProgress()
             }
-            setUIProgress()
         }
 
         updateWidth();
@@ -559,29 +547,88 @@ async function party() {
         return [calculateProgress, updateWidth]
     }
 
-    function setInteractableProgressBarWidth() {
+    function windowResized() {
+        if(Date.now() - last_toggled_resize < 100) return;
+        last_toggled_resize = Date.now();
+
         updateMediaProgressWidth();
         updateMediaVolumeWidth();
+        checkPartyOverflow();
     }
     
+    function checkPartyOverflow() {
+        // check observers to determine overflow
+        if(
+            top_observer.getBoundingClientRect().top < 0 ||
+            bottom_observer.getBoundingClientRect().top > party_page.offsetHeight
+        ) {
+            party_page.style.overflowY = 'scroll';
+        } else {
+            party_page.style.overflowY = 'hidden';
+        }
+    }
+
     function calculateSetProgressByTime(time = 0) {
         if(!displaying.elem) return;
         let duration = displaying.elem.duration,
             currentTime = displaying.elem.currentTime;
         time = Math.max(Math.min(currentTime + time, duration), 0);
         displaying.elem.currentTime = time;
-        calculateMediaProgress('progress', {value: time, total: duration});
     }
 
     function setVolume(change) {
         if(!displaying.elem) return;
         const newVol = Math.max(Math.min(displaying.currentVolume + change, 1), 0);
         displaying.elem.volume = newVol;
-        displaying.currentVolume = newVol;
-        calculateMediaVolume('progress', {
-            value:  newVol,
-            total: 1
-        })
+    }
+
+    function mediaElemEvtListeners() {
+        let media_time_update_cooldown = 0;
+
+        function mediaVolumeChanged() {
+            displaying.currentVolume = displaying.elem.volume;
+            calculateMediaVolume({
+                value:  displaying.currentVolume,
+                total: 1
+            })
+        }
+        function updatePlayIcon() {
+            if(displaying.elem) {
+                if(displaying.elem.paused) {
+                    toggle_play_btn.innerHTML = Play;
+                    toggle_play_btn.title = '播放';
+                } else {
+                    toggle_play_btn.innerHTML = PauseFill;
+                    toggle_play_btn.title = '暂停';
+                }
+            }
+        }
+        function mediaTimeUpdated() {
+            if(Date.now() < media_time_update_cooldown && !manual_update_media_time) return;
+            media_time_update_cooldown = Date.now() + 100;
+            manual_update_media_time = false;
+
+            if(displaying.elem) {
+                calculateMediaProgress({
+                    value: displaying.elem.currentTime,
+                    total: displaying.elem.duration
+                })
+            }
+        }
+
+        video_component.onended = playNext;
+        audio_component.onended = playNext;
+
+        video_component.onvolumechange = mediaVolumeChanged;
+        audio_component.onvolumechange = mediaVolumeChanged;
+        
+        video_component.onpause = updatePlayIcon;
+        audio_component.onpause = updatePlayIcon;
+        video_component.onplay = updatePlayIcon;
+        audio_component.onplay = updatePlayIcon;
+
+        video_component.ontimeupdate = mediaTimeUpdated;
+        audio_component.ontimeupdate = mediaTimeUpdated;
     }
 
     function updateTextScrollAnimation(elem, parentElem = null, pauseAfterFinish = 2000, speed = 70) {
@@ -625,7 +672,8 @@ async function party() {
 
     // main page
     main.innerHTML = `
-    <div class='party'>
+    <div id='party'>
+        <div class='overflow-observer' name='top-observer'></div>
         <div class='party-main'>
             <div class='media-container-block'>
                 <div class='media-container'>
@@ -633,7 +681,7 @@ async function party() {
                         <div class='music-title'><div class='music-title-text'></div></div>
                         ${VinylFill}
                     </div>
-                    <video id='video-component'></video>
+                    <video id='video-component' controls></video>
                     <audio id='audio-component'></audio>
                 </div>
             </div>
@@ -666,6 +714,7 @@ async function party() {
                 <div class='item clickable' id='logout'><div>退出登录</div></div>
             </div>
         </div>
+        <div class='overflow-observer' name='bottom-observer'></div>
     </div>`
 
     // components on main page
@@ -673,6 +722,11 @@ async function party() {
     const audio_component = document.getElementById('audio-component');
     const audio_title_container = document.querySelector('.media-container .music-title-container')
     const audio_title = document.querySelector('.media-container .music-title-container .music-title .music-title-text')
+    
+    // observers and references
+    const top_observer = document.querySelector('.overflow-observer[name="top-observer"]');
+    const bottom_observer = document.querySelector('.overflow-observer[name="bottom-observer"]');
+    const party_page = document.getElementById('party');
 
     const setVideoHls = loadHls(video_component, 'video');
     const setAudioHls = loadHls(audio_component, 'audio');
@@ -681,8 +735,8 @@ async function party() {
     const how_to_play = document.getElementById('how-to-play')
 
     // listeners
-    video_component.onended = playNext;
-    audio_component.onended = playNext;
+    mediaElemEvtListeners();
+
     toggle_play_btn.onclick = togglePlay;
     document.getElementById('last').onclick = playLast
     document.getElementById('next').onclick = playNext
@@ -700,23 +754,16 @@ async function party() {
             playStates.random_order = shuffle(playStates.order)
         }
     }
-    window.addEventListener('resize', setInteractableProgressBarWidth);
+    
+    window.addEventListener('resize', windowResized);
     document.addEventListener('keydown', keyboardControl)
-    const [calculateMediaProgress, updateMediaProgressWidth] = interactableProgressBar('progress', (value, type) => {
-        if(!displaying.elem) return false;
-        if(type === 'percent') {
-            displaying.elem.currentTime = displaying.elem.duration * value;
-        } else {
-            displaying.elem.currentTime = value;
-        }
-        return true;
+    
+    const [calculateMediaProgress, updateMediaProgressWidth] = interactableProgressBar('progress', value => {
+        manual_update_media_time = true;
+        if(displaying.elem) displaying.elem.currentTime = displaying.elem.duration * value;
     })
-    const [calculateMediaVolume, updateMediaVolumeWidth] = interactableProgressBar('volume', (value, type) => {
-        if(!displaying.elem) return false;
-
-        displaying.elem.volume = value;
-        displaying.currentVolume = value;
-        return true;
+    const [calculateMediaVolume, updateMediaVolumeWidth] = interactableProgressBar('volume', value => {
+        if(displaying.elem) displaying.elem.volume = value;
     })
     
 
@@ -955,7 +1002,7 @@ async function party() {
     }
     async function uploadManager() {
         function updateUploadingProgress(elem, displayElem, status, progress) {
-            const progress_percent = Math.floor(progress * 100)
+            const progress_percent = Math.floor(Math.max(progress * 100, 0))
             elem.textContent = '上传进度: ' +
                 status === 'pending' ? '正在上传文件' : 
                 status === 'fragmenting' ? `正在进行文件分片, 进度${progress_percent}%` : 
@@ -1034,7 +1081,7 @@ async function party() {
                 deleteBtn.onclick = async () => {
                     if(status !== 'fragmenting') {
                         if(Date.now() - last_click > 10000) {
-                            showNotification('请再点击一次以确认删除');
+                            showNotification('请再点击一次以确认删除', 'info', 10000);
                             last_click = Date.now();
                         } else {
                             const delete_result = await (await fetch(`${BASE_URL}/playlist`, {
@@ -1075,7 +1122,7 @@ async function party() {
         // clean up
         closePopup();
         Cookies.remove('session-id');
-        window.removeEventListener('resize', setInteractableProgressBarWidth);
+        window.removeEventListener('resize', windowResized);
         document.removeEventListener('keydown', keyboardControl);
         // process to login
         askLogin();
@@ -1087,19 +1134,10 @@ async function party() {
     document.getElementById('user-center').onclick = () => {console.log(displaying.elem.duration)}
 
     // init
-    // always sync progress bar with media progress
-    function syncMediaProgress() {
-        logged_in && requestAnimationFrame(syncMediaProgress)
-        if(displaying.elem && !displaying.elem.paused) {
-            calculateMediaProgress('progress', {
-                value: displaying.elem.currentTime,
-                total: displaying.elem.duration
-            })
-        }
-    }
-    requestAnimationFrame(syncMediaProgress)
     // load playlist info on load
     getPlaylist();
+    // check if party page should overflow
+    checkPartyOverflow();
 }
 
 // SECTION: start
@@ -1122,8 +1160,8 @@ div {
 
 #main {
     width: 100vw;
-    height: 100dvh;
-    max-height: --webkit-fill-available;
+    height: 100vh;
+    max-height: -webkit-fill-available;
     position: fixed;
     top: 0;
     left: 0;
@@ -1150,7 +1188,7 @@ to { transform: translateX(-100%); }
 #popup-container,
 #notification-container {
     width: 100vw;
-    height: 100dvh;
+    height: 100vh;
     position: fixed;
     top: 0;
     left: 0;
@@ -1201,7 +1239,7 @@ to { transform: translateX(-100%); }
         transition-duration: .3s;
         width: 50%;
         height: 50%;
-        margin: 15dvh 25%;
+        margin: 15vh 25%;
         background-color: white;
         border: 1px solid gray;
         border-radius: 7px;
@@ -1224,7 +1262,7 @@ to { transform: translateX(-100%); }
     display: block;
     position: relative;
     margin: auto;
-    margin-top: 20dvh;
+    margin-top: 20vh;
     text-align: center;
     margin-bottom: 50px;
 
@@ -1287,7 +1325,7 @@ to { transform: translateX(-100%); }
 
 
 /* party */
-.party {
+#party {
     --nav-bar-width: 50px;
     --nav-bar-item-width: 200px;
     --nav-bar-left-padding: 35px;
@@ -1300,9 +1338,9 @@ to { transform: translateX(-100%); }
     width: 100%;
 
     #nav-bar {
-        width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + (var(--nav-bar-left-padding) + var(--nav-bar-right-padding)));
+        width: calc(var(--nav-bar-item-width) + var(--nav-bar-width) + var(--nav-bar-left-padding) + var(--nav-bar-right-padding) + 7px);
         height: 100%;
-        position: absolute;
+        position: fixed;
         top: 0;
         left: 0;
         border-right: 1px solid grey;
@@ -1359,7 +1397,7 @@ to { transform: translateX(-100%); }
     .party-main {
         height: fit-content;
         width: calc(100% - var(--nav-bar-width));
-        position: absolute;
+        position: relative;
         left: var(--nav-bar-width);
         top: 0;
     }
@@ -1521,6 +1559,15 @@ to { transform: translateX(-100%); }
         .controller.sub-icon i {
             font-size: calc(var(--controllers-height) - 10px);
         }
+    }
+
+    .overflow-observer {
+        position: relative;
+        width: 100%;
+        height: 10px;
+    }
+    .overflow-observer:first-child {
+        position: absolute;
     }
 }
 
@@ -1743,7 +1790,8 @@ to { transform: translateX(-100%); }
             margin-bottom: unset;
         }
     }
-
+    .manage-block:first-child {margin-top: unset;}
+    .manage-block:last-child {margin-bottom: unset;}
 }
 
 /* mobile view */
@@ -1802,7 +1850,7 @@ to { transform: translateX(-100%); }
     }
 
 
-    .party {
+    #party {
         --nav-bar-width: 0px;
         --media-container-height: 800px;
         --controllers-height: 60px;
@@ -1914,6 +1962,22 @@ to { transform: translateX(-100%); }
             border-radius: 15px;
             display: block;
             height: 70px;
+        }
+    }
+
+    #upload-manager-main {
+        .manage-block {
+            .title {
+                height: 100px;
+                padding: 0px 20px;
+            }
+
+            .progress-bar {
+                height: 12px;
+            }
+        }
+        .manage-block * {
+            font-size: 30px !important;
         }
     }
 }
