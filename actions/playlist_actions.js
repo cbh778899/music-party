@@ -69,7 +69,8 @@ exports.getPlaylistFile = async function (req, res) {
 
     if((await retrieveUser(sessionID)) > 0) {
         const filename = await getOne('playlists', 'filename', {id: + id});
-        res.sendFile(`${dirName}/${FILES_DIR}/${filename}/${requested_filename}`);
+        if(!filename) res.status(400).json({error_msg: 'File Not Found!'})
+        else res.sendFile(`${dirName}/${FILES_DIR}/${filename}/${requested_filename}`);
     } else send403(res);
 }
 
@@ -151,6 +152,23 @@ exports.getUserUploadStatus = async function(req, res) {
     } else send403(res);
 }
 
+exports.updateTitle = async function(req, res) {
+    const { sessionID, id, title } = req.body;
+    const user_id = await retrieveUser(sessionID);
+    if(user_id > 0) {
+        let result = false;
+        const waiting_update = await getOne('uploads', ['id', 'playlist_id'], { id, user_id })
+        if(waiting_update) {
+            result = true;
+            const { playlist_id } = waiting_update;
+            
+            await update('uploads', { title }, { id });
+            if(playlist_id) await update('playlists', { title }, { id: playlist_id });
+        }
+        res.send(result)
+    } else send403(res)
+}
+
 exports.removePlayList = async function(req, res) {
     const { id, sessionID } = req.body;
     const user_id = await retrieveUser(sessionID);
@@ -160,13 +178,13 @@ exports.removePlayList = async function(req, res) {
         if(playlistInfo) {
             const { upload_status, filename, suffix, playlist_id } = playlistInfo;
             if(upload_status !== 'fragmenting') {
+                result = true;
                 const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`;
                 const playlist_dir = `./${FILES_DIR}/${filename}`;
-                console.log(process_file)
                 fs.existsSync(process_file) && fs.unlinkSync(process_file);
                 fs.existsSync(playlist_dir) && fs.rmSync(playlist_dir, { recursive: true });
-                await deleteFrom('playlists', { playlist_id });
                 await deleteFrom('uploads', { id });
+                if(playlist_id) await deleteFrom('playlists', { id: playlist_id });
             }
         }
         res.send(result);
