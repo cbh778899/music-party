@@ -74,7 +74,7 @@ exports.getOne = async function (table, select = '*', where = null) {
     const getResult = await get(db, query, params);
     await close(db);
     if(typeof select === 'string' && select !== '*') {
-        return getResult[select];
+        return getResult ? getResult[select] : null;
     } return getResult;
 }
 
