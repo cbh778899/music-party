@@ -1,14 +1,32 @@
 const { OPEN_READONLY, OPEN_READWRITE, OPEN_CREATE } = require('sqlite3');
 const { open, close, get, all, run } = require('./promise_sqlite3')
 
-function formatWhereQuery(whereQuery, action = null) {
-    return (
-        ` WHERE ${Object.entries(whereQuery).map(e=>{
+function formateObjWhere(queryObj, action = null) {
+    if(queryObj.in) {
+        return `${queryObj.in} IN (${queryObj.inArray.map((e, i)=>{
+            action && action(e, i);
+            return '?'
+        }).join(', ')})`
+    } else {
+        return Object.entries(queryObj).map(e=>{
             const [key, value] = e;
             action && action(value, key);
             return `${key}=?`;
-        }).join(' AND ')}`
-    )
+        }).join(' AND ')
+    }
+}
+
+function formatWhereQuery(whereQuery, action = null) {
+    let query = ' WHERE '
+    if(Array.isArray(whereQuery)) {
+        query += whereQuery.map(objWhere => {
+            return `(${formateObjWhere(objWhere, action)})`
+        }).join` OR `;
+    } else {
+        query += formateObjWhere(whereQuery, action);
+    }
+
+    return query;
 }
 
 function formatSelectQuery(table, select = '*', whereQuery = null) {
