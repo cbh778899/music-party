@@ -11,6 +11,7 @@ require('./database').openDB(null, true);
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
+require('express-ws')(app);
 app.use(require('cors')())
 app.use(bodyParser.json())
 
