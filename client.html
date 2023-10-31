@@ -1340,7 +1340,7 @@ async function party() {
                 popupWindow.innerHTML = 
                 `<div class='room-popup'>
                     <div class='room-info'>您当前所在的房间号是<strong>${roomID}</strong></div>
-                    <button id='exit-room'>离开房间</button>
+                    <button id='exit-room' class='clickable'>离开房间</button>
                 </div>`
 
                 document.getElementById('exit-room').onclick = () => {
@@ -1356,10 +1356,10 @@ async function party() {
     function roomPopup() {
         popupWindow.innerHTML = 
         `<div class='room-popup'>
-            <button id='create-room'>点击创建房间</button>
-            <form id='join-room'>
+            <button class='clickable' id='create-room'>点击创建房间</button>
+            <form id='join-room' autocomplete='off'>
                 <input type='text' name='room-code' placeholder='房间号'>
-                <button type='submit'>加入房间</button>
+                <button class='clickable' type='submit'>加入房间</button>
             </form>
         </div>
         `
@@ -2055,15 +2055,32 @@ to { transform: translateX(-100%); }
     .manage-block:last-child {margin-bottom: unset;}
 }
 
-/* .room-popup .room-info {
-
+.room-popup { padding-top: 30px; }
+.room-popup .room-info {
+    font-size: 25px;
+    text-align: center;
+    display: block;
+    margin-bottom: 30px;
 }
-.room-popup button {
-    
+.room-popup button, .room-popup input[type='text'] {
+    width: 70%;
+    display: block;
+    height: 55px;
+    font-size: 20px;
+    border-radius: 10px;
+    border: 1px solid;
+    margin: auto;
+    margin-bottom: 20px;
+    background-color: dodgerblue;
+    color: white;
 }
 .room-popup input[type='text'] {
-
-} */
+    box-sizing: border-box;
+    text-align: center;
+    background: initial;
+    color: initial;
+    margin-top: 50px;
+}
 /* mobile view */
 @media screen and (max-width: 1023px) {
     #notification-container .notification {
@@ -2084,11 +2101,6 @@ to { transform: translateX(-100%); }
         --show-pass-icon-height: 50px;
         font-size: 50px;
 
-        input:not(input[type='checkbox']) {
-            border-radius: 15px;
-            padding: 0 40px;
-            font-size: 35px;
-        }
         #show-password i::before {
             vertical-align: 1em;
         }
@@ -2101,6 +2113,11 @@ to { transform: translateX(-100%); }
     #login-form button {
         font-size: 35px;
         border-radius: 15px;
+    }
+    #login-form input:not(input[type='checkbox']) {
+        border-radius: 15px;
+        padding: 0 40px;
+        font-size: 35px;
     }
 
     #playlist-main {
@@ -2249,6 +2266,20 @@ to { transform: translateX(-100%); }
         .manage-block * {
             font-size: 30px !important;
         }
+    }
+
+    .room-popup .room-info {
+        font-size: 45px;
+        margin: 100px 0px;
+    }
+    .room-popup button, .room-popup input[type='text'] {
+        width: 90%;
+        height: 100px;
+        font-size: 35px;
+        margin-bottom: 30px;
+    }
+    .room-popup input[type='text'] {
+        margin-top: 100px;
     }
 }
         </style>
