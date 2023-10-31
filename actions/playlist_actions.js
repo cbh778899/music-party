@@ -44,9 +44,9 @@ async function finishUpload(filename, id, user_id, title, type, process_file) {
 
 function uploadStatus(upload_info) {
     if(!upload_info) return {};
-    const { id, title, upload_status, est_fragments, filename } = upload_info;
+    const { id, title, playlist_id, upload_status, est_fragments, filename } = upload_info;
     const status = {
-        id, title,
+        id, title, playlist_id,
         status: upload_status,
         progress: 0
     }
@@ -189,4 +189,11 @@ exports.removePlayList = async function(req, res) {
         }
         res.send(result);
     } else send403(res);
+}
+
+exports.getPlaylistByIDs = async function(ids) {
+    return await getAll(
+        'playlists', 
+        ['id', 'title', 'type', 'filename'], 
+        {in: 'id', inArray: ids})
 }
