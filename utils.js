@@ -9,6 +9,10 @@ exports.calculateExpDate = function(requestDate) {
     return `${requestDate + OneYear}`;
 }
 
+exports.generateRoomCode = function() {
+    return [...Array(4)].map(()=>Math.floor(Math.random() * 10)).join``
+}
+
 exports.send403 = function(response) {
     response.status(403).send({error_msg: 'User Session Not Available'})
 }
