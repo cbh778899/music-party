@@ -73,7 +73,6 @@ window.onload = function() {
 'use strict';
 
 // SECTION: constants
-const BASE_URL = '';
 const FILE_CHUNK_SIZE = 1024 * 1024;
 const MEDIA_FRAGMENT_DURATION = 10;
 const MAX_RETRY = 3;
@@ -153,7 +152,7 @@ function askLogin() {
         const account = evt.target.account.value;
         const password = evt.target.password.value;
         
-        fetch(`${BASE_URL}/account/login`, {
+        fetch(`/account/login`, {
             method: 'POST',
             body: JSON.stringify({account, password}),
             headers: {'Content-Type': 'application/json'}
@@ -215,7 +214,7 @@ function askLogin() {
 async function party() {
 
     const sessionID = Cookies.get('session-id')
-    const user_login_validated = await (await fetch(`${BASE_URL}/account/validate-login`,{
+    const user_login_validated = await (await fetch(`/account/validate-login`,{
         method: 'POST',
         body: JSON.stringify({ sessionID }),
         headers: { 'Content-Type': 'application/json' }
@@ -235,11 +234,34 @@ async function party() {
     const playStates = {
         playlist: {},
         playing: 0, order: [],
-        how: 'loop', random_order: []
+        random_order: [],
+        _how: 'loop',
+        set how(way) {
+            this._how = way;
+            how_to_play.innerHTML = 
+                way === 'playlist' ? ListUl :
+                way === 'single' ? RepeatOne : 
+                way === 'random' ? Shuffle : 
+                Repeat
+            
+            if(way === 'random') {
+                playStates.random_order = shuffle(playStates.order)
+            }
+        },
+        get how() {
+            return this._how;
+        }
     }
     
     let last_toggled_resize = 0;
-    let manual_update_media_time = false;
+    let manual_update_media_time = false,
+        manual_toggle_play = false,
+        can_sync_media_time = false;
+    
+    const roomMode = { 
+        activate: false, playlist: {}, order: [], extra: {},
+        syncProgress: null, exitRoom: null, requestUpdatePlaylist: null
+    };
 
     // functions
     function loadHls(bound_elem, type) {
@@ -309,7 +331,7 @@ async function party() {
         async function abort() {
             if(currentChunkIndex !== -1 && referenceID !== -1) {
                 currentChunkIndex = -1;
-                const abort_result = await (await fetch(`${BASE_URL}/playlist/`, {
+                const abort_result = await (await fetch(`/playlist/`, {
                     method: 'DELETE',
                     body: JSON.stringify({id: referenceID, sessionID}),
                     headers: {'Content-Type': 'application/json'},
@@ -338,7 +360,7 @@ async function party() {
                 sessionID, referenceID, chunkIndex: currentChunkIndex
             })
 
-            const upload_result = await (await fetch(`${BASE_URL}/playlist/upload-chunk?${searchParams.toString()}`, {
+            const upload_result = await (await fetch(`/playlist/upload-chunk?${searchParams.toString()}`, {
                 method: 'POST',
                 body: chunk,
                 headers: {'Content-Type': 'application/octet-stream'}
@@ -383,15 +405,22 @@ async function party() {
         init();
     }
 
-    async function getPlaylist() {
-        const user_playlists = await (await fetch(
-            `${BASE_URL}/playlist/user-playlist?${new URLSearchParams({sessionID}).toString()}`)
+    async function getPlaylist(playlist = null) {
+        const user_playlists = playlist || await (await fetch(
+            `/playlist/user-playlist?${new URLSearchParams({sessionID}).toString()}`)
         ).json()
         if(user_playlists.length) {
             for(const media of user_playlists) {
+                if(roomMode.activate && playlist) {
+                    roomMode.playlist[media.id] = media;
+                    continue;
+                }
                 playStates.playlist[media.id] = media;
                 playStates.order.includes(media.id) || playStates.order.push(media.id);
             }
+        }
+        if(roomMode.activate && !playlist) {
+            roomMode.requestUpdatePlaylist()
         }
         return;
     }
@@ -402,7 +431,7 @@ async function party() {
         if(referenceID > 0) query.referenceID = referenceID;
         return await (
             await fetch(
-                `${BASE_URL}/playlist/${url}-upload-status?${new URLSearchParams(query).toString()}`
+                `/playlist/${url}-upload-status?${new URLSearchParams(query).toString()}`
             )
         ).json()
     }
@@ -410,16 +439,18 @@ async function party() {
     function togglePlay() {
         if(displaying.elem) {
             displaying.elem.paused ? displaying.elem.play() : displaying.elem.pause();
-        } else if(playStates.order.length && playStates.playing === 0) {
-            playNext();
+        } else if(((roomMode.activate && roomMode.order.length) || playStates.order.length) && playStates.playing === 0) {
+            playNext(false);
         }
+        manual_toggle_play = true;
     }
 
-    function playMedia() {
-        const media = playStates.playlist[playStates.playing]
+    function playMedia(isManualPlay = false) {
+        const media_list = roomMode.activate ? roomMode.playlist : playStates.playlist
+        const media = media_list[playStates.playing]
         media.type === 'audio' ?
-            setAudioHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`) :
-            setVideoHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`)
+            setAudioHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`) :
+            setVideoHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`)
 
         if(document.querySelector("#playlist-main")) {
             document.querySelector("#playlist-main .media.playing").classList.remove('playing');
@@ -440,45 +471,58 @@ async function party() {
         } else {
             audio_title_container.style.display = 'none';
         }
+
+        if(roomMode.activate && isManualPlay) roomMode.syncProgress()
     }
 
-    function playNext() {
-        if(!playStates.order.length) return;
+    function playNext(manual = true) {
+        if(!(roomMode.activate && roomMode.order.length) && !playStates.order.length) return;
         if(playStates.how === 'single') {
-            playMedia(); return;
+            playMedia(manual); return;
         }
-        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+        const followOrder = 
+            roomMode.activate ? roomMode.order : 
+            playStates.how === 'random' ? playStates.random_order : 
+            playStates.order
         const index = followOrder.indexOf(playStates.playing);
         // if is last
         if(index >= followOrder.length - 1) {
-            switch(playStates.how) {
-                case 'playlist': return;
-                case 'random':
-                    playStates.random_order = shuffle(playStates.order);
-                    playStates.playing = playStates.random_order[0];
-                    break;
-                case 'loop':
-                default:
-                    playStates.playing = playStates.order[0];
-                    break;
+            if(roomMode.activate) {
+                if(playStates.how === 'playlist') return;
+                else playStates.playing = followOrder[0];
+            } else {
+                switch(playStates.how) {
+                    case 'playlist': return;
+                    case 'random':
+                        playStates.random_order = shuffle(playStates.order);
+                        playStates.playing = playStates.random_order[0];
+                        break;
+                    case 'loop':
+                    default:
+                        playStates.playing = playStates.order[0];
+                        break;
+                }
             }
         } else playStates.playing = followOrder[index + 1]
-        playMedia();
+        playMedia(manual);
     }
 
     function playLast() {
-        if(!playStates.order.length) return;
+        if((!(roomMode.activate && roomMode.order.length) && !playStates.order.length)) return;
         if(playStates.how === 'single') {
-            playMedia(); return;
+            playMedia(true); return;
         }
-        const followOrder = playStates.how === 'random' ? playStates.random_order : playStates.order
+        const followOrder = 
+            roomMode.activate ? roomMode.order : 
+            playStates.how === 'random' ? playStates.random_order : 
+            playStates.order
         const index = followOrder.indexOf(playStates.playing);
         // if is first
         if(index <= 0) {
             if(playStates.how === 'playlist') return;
             else playStates.playing = followOrder.slice(-1)[0]
         } else playStates.playing = followOrder[index - 1];
-        playMedia();
+        playMedia(true);
     }
 
     function keyboardControl(evt) {
@@ -504,11 +548,25 @@ async function party() {
         container.offsetWidth;
 
         container.onmousedown = () => {states.mouseDown = true}
-        container.onmouseleave = () => {states.mouseDown = false}
-        container.onmouseup = () => {states.mouseDown = false}
+        container.onmouseup = () => {
+            if(name==='progress') can_sync_media_time = true;
+            states.mouseDown = false
+        }
+        container.onmouseleave = () => {
+            if(name==='progress' && states.mouseDown)
+                can_sync_media_time = true;
+            states.mouseDown = false
+        }
         container.ontouchstart = () => {states.mouseDown = true}
-        container.ontouchend = () => {states.mouseDown = false}
-        container.ontouchcancel = () => {states.mouseDown = false}
+        container.ontouchend = () => {
+            if(name==='progress') can_sync_media_time = true;
+            states.mouseDown = false
+        }
+        container.ontouchcancel = () => {
+            if(name==='progress' && states.mouseDown)
+                can_sync_media_time = true;
+            states.mouseDown = false
+        }
         container.onclick = evt => {
             states.X = evt.offsetX;
             calculateProgress(null, true);
@@ -574,6 +632,7 @@ async function party() {
             currentTime = displaying.elem.currentTime;
         time = Math.max(Math.min(currentTime + time, duration), 0);
         displaying.elem.currentTime = time;
+        can_sync_media_time = true;
     }
 
     function setVolume(change) {
@@ -602,11 +661,17 @@ async function party() {
                     toggle_play_btn.title = '暂停';
                 }
             }
+            roomMode.activate && manual_toggle_play && roomMode.syncProgress();
+            manual_toggle_play = false;
         }
         function mediaTimeUpdated() {
             if(Date.now() < media_time_update_cooldown && !manual_update_media_time) return;
             media_time_update_cooldown = Date.now() + 100;
+
+            if(can_sync_media_time && roomMode.activate) roomMode.syncProgress();
+
             manual_update_media_time = false;
+            can_sync_media_time = false;
 
             if(displaying.elem) {
                 calculateMediaProgress({
@@ -708,9 +773,10 @@ async function party() {
             <div class='items'>
                 <div class='item clickable' id='user-center'><div>用户中心</div></div>
                 <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
+                <div class='item clickable' id='update-playlist'><div>更新播放列表</div></div>
                 <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
                 <div class='item clickable' id='upload-manager'><div>管理我的上传</div></div>
-                <div class='item clickable'><div>新建/加入房间</div></div>
+                <div class='item clickable' id='join-room-menu'><div>创建/加入房间</div></div>
                 <div class='item clickable' id='logout'><div>退出登录</div></div>
             </div>
         </div>
@@ -742,16 +808,12 @@ async function party() {
     document.getElementById('next').onclick = playNext
     document.getElementById('show-playlist-icon').onclick = () => showPopup(showPlaylist)
     how_to_play.onclick = function() {
-        if(!playStates.order.length) return;
+        if((!(roomMode.activate && roomMode.order.length) && !playStates.order.length)) return;
         const idx = PLAY_WAYS.indexOf(playStates.how)
         playStates.how = PLAY_WAYS[idx === PLAY_WAYS.length - 1 ? 0 : idx + 1]
-        how_to_play.innerHTML = 
-            playStates.how  === 'playlist' ? ListUl :
-            playStates.how  === 'single' ? RepeatOne : 
-            playStates.how  === 'random' ? Shuffle : Repeat
-        
-        if(playStates.how === 'random') {
-            playStates.random_order = shuffle(playStates.order)
+
+        if(roomMode.activate) {
+            roomMode.requestUpdatePlaylist(true);
         }
     }
     
@@ -797,6 +859,8 @@ async function party() {
             return function(abort) {
                 stats.abort = abort;
                 return function(progress, additional = null) {
+                    if(progress === 'finished') getPlaylist()
+
                     const msg = 
                         progress === 'upload' ? `[${playlist_name}] 上传中... ${additional < 10 && '0' || ''}${additional}%` :
                         progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${additional < 10 && '0' || ''}${additional}%` :
@@ -960,19 +1024,17 @@ async function party() {
         cancelBtn.onclick = cleanUp;
     }
     async function showPlaylist() {
-        popupWindow.innerHTML = `
-        <div id='playlist-main'>
-            <div id='loading' class='info'>正在加载播放列表</div>
-        </div>
-        `
+        if(popupWindowVisibility) popupWindow.innerHTML = ''
 
-        const playlist_main = document.getElementById('playlist-main');
-        await getPlaylist();
-        document.getElementById('loading').remove();
+        const playlist_main = document.createElement('div')
+        playlist_main.id = 'playlist-main'
         
-        if(playStates.order.length) {
-            playStates.order.forEach(id=>{
-                const media = playStates.playlist[id];
+        const loading_playlist_order = roomMode.activate ? roomMode.order : playStates.order
+        const loading_playlist = roomMode.activate ? roomMode.playlist : playStates.playlist
+        if(loading_playlist_order.length) {
+            loading_playlist_order.forEach(id=>{
+                const media = loading_playlist[id];
+                if(!media) return;
 
                 const playBtn = document.createElement('div');
                 playBtn.className = 'media clickable'
@@ -988,7 +1050,7 @@ async function party() {
                     last_playing && last_playing.classList.remove('playing')
                     playBtn.classList.add('playing')
                     playStates.playing = media.id;
-                    playMedia();
+                    playMedia(true);
                 }
                 
                 playBtn.appendChild(playBtnText);
@@ -999,15 +1061,18 @@ async function party() {
         } else {
             playlist_main.innerHTML = `<div class='info'>您当前没有播放列表</div>`
         }
+        
+        popupWindow.appendChild(playlist_main)
     }
     async function uploadManager() {
-        function updateUploadingProgress(elem, displayElem, status, progress) {
+        function updateUploadingProgress(elem, displayElem, status, progress, isFirstTime = false) {
             const progress_percent = Math.floor(Math.max(progress * 100, 0))
             elem.textContent = '上传进度: ' +
                 status === 'pending' ? '正在上传文件' : 
                 status === 'fragmenting' ? `正在进行文件分片, 进度${progress_percent}%` : 
                 '上传已完成'
             displayElem.style.transform = `translateX(-${100-progress_percent}%)`;
+            if(progress === 'finished' && !isFirstTime) getPlaylist()
         }
 
         popupWindow.innerHTML = `
@@ -1020,7 +1085,7 @@ async function party() {
         const upload_manager_main = document.getElementById('upload-manager-main');
         if(user_upload_progress.length) {
             user_upload_progress.forEach(upload => {
-                let { id, title, status, progress } = upload;
+                let { id, title, status, progress, playlist_id } = upload;
                 let interval_id;
 
                 const manageBlock = document.createElement('div');
@@ -1057,7 +1122,7 @@ async function party() {
                 renameBtn.textContent = '更新标题'
                 renameBtn.onclick = async () => {
                     if(titleText.value && titleText.value !== title) {
-                        const update_result = (await fetch(`${BASE_URL}/playlist/update-title`, {
+                        const update_result = (await fetch(`/playlist/update-title`, {
                             method: 'POST',
                             body: JSON.stringify({ sessionID, id, title: titleText.value }),
                             headers: { 'Content-Type': 'application/json' }
@@ -1084,7 +1149,7 @@ async function party() {
                             showNotification('请再点击一次以确认删除', 'info', 10000);
                             last_click = Date.now();
                         } else {
-                            const delete_result = await (await fetch(`${BASE_URL}/playlist`, {
+                            const delete_result = await (await fetch(`/playlist`, {
                                 method: 'DELETE',
                                 body: JSON.stringify({ sessionID, id }),
                                 headers: { 'Content-Type': 'application/json' }
@@ -1092,6 +1157,11 @@ async function party() {
                             if(!delete_result.error_msg && delete_result) {
                                 showNotification(`成功删除 [${title}]!`, 'success');
                                 manageBlock.remove();
+                                if(playlist_id) {
+                                    playStates.order.splice(playStates.order.indexOf(playlist_id), 1)
+                                    delete playStates.playlist[playlist_id]
+                                    if(roomMode.activate) roomMode.extra.deletePlaylist = playlist_id;
+                                }
                                 getPlaylist();
                                 if(interval_id) clearInterval(interval_id);
                             } else {
@@ -1110,29 +1180,221 @@ async function party() {
                 manageBlock.appendChild(deleteBtn);
                 upload_manager_main.appendChild(manageBlock);
 
-                updateUploadingProgress(statusText, statusDisplayBarBg, status, progress);
+                updateUploadingProgress(statusText, statusDisplayBarBg, status, progress, true);
             })
         } else {
             upload_manager_main.innerHTML = "<div class='info'>暂无上传记录!</div>"
         }
 
     }
+    function room(roomCode = null) {
+        const ws = new WebSocket(`ws://${/^.*:\/\/([^\/]*).*$/.exec(window.location.href)[1]}/ws/room`);
+        let userID, roomID;
 
+        function handleMessage(msg) {
+            switch(msg.msgType) {
+                case 'joined-room':
+                    if(msg.content.userID) {
+                        joinedRoom(msg.content)
+                        showNotification(`已成功加入房间${roomID}!`)
+                    } else {
+                        showNotification(`用户${msg.content.userName}已加入房间!`)
+                    }
+                    syncPlaylist(msg.content);
+                    break;
+                case 'room-created':
+                    joinedRoom(msg.content)
+                    roomMode.order = playStates.order;
+                    roomMode.playlist = playStates.playlist;
+                    showNotification(`已成功创建房间, 房间号为: ${roomID}`)
+                    break;
+                case 'request-sync-progress':
+                    sendCurrentInfo('respond-sync')
+                    break;
+                case 'sync-progress':
+                    syncProgress(msg.content);
+                    break;
+                case 'update-play-way':
+                case 'update-playlist':
+                    syncPlaylist(msg.content)
+                    break;
+                case 'update-too-frequent':
+                    showNotification('跳的太快啦, 大家要跟不上了啦')
+                    break;
+                case 'ejection':
+                    showNotification('房间的连接已被拒绝!', 'warning')
+                    closeConnection(); return;
+                case 'session-end':
+                    showNotification('已离开房间, 返回单人模式')
+                    closeConnection(); return;
+                case 'room-not-exist':
+                    showNotification('请求加入的房间不存在, 请确认您输入的房间号是否正确', 'warning')
+                    closeConnection(); return;
+                default: return;
+            }
+        }
+
+        function joinedRoom(content) {
+            userID = content.userID;
+            roomID = content.roomID;
+            roomMode.activate = true;
+            roomMode.syncProgress = sendCurrentInfo;
+            roomMode.exitRoom = exitRoom;
+            roomMode.requestUpdatePlaylist = requestUpdatePlaylist;
+            updateJoinRoomMenu()
+        }
+
+        function closeConnection() {
+            ws.close();
+        }
+
+        function syncPlaylist({playlistOrder, playlistInfo, howToPlay}) {
+            roomMode.order = playlistOrder;
+            playStates.how = howToPlay;
+            playlistInfo && getPlaylist(playlistInfo);
+        }
+
+        function syncProgress(waiting_sync) {
+            const { playlistID, progress, isPaused, delayed, date } = waiting_sync;
+            if(playlistID !== playStates.playing) playStates.playing = playlistID;
+            playMedia();
+            displaying.elem.currentTime = isPaused || delayed < 100 ? progress : progress + (delayed + (Date.now() - date)) / 1000
+            isPaused && displaying.elem.pause();
+        }
+
+        function requestUpdatePlaylist(wayOnly = false) {
+            // send update request
+            if(wayOnly) {
+                ws.send(JSON.stringify({
+                    msgType: 'switch-play-way',
+                    roomID, userID,
+                    content: { howToPlay: playStates.how }
+                }))
+            } else {
+                const content = { playlist: playStates.order }
+                if(roomMode.extra.deletePlaylist) {
+                    content.deletePlaylist = roomMode.extra.deletePlaylist;
+                    delete roomMode.extra.deletePlaylist
+                }
+                ws.send(JSON.stringify({
+                    msgType: 'update-playlist',
+                    roomID, userID,
+                    content
+                }))
+            }
+        }
+
+        function sendCurrentInfo(msgType = 'sync') {
+            ws.send(JSON.stringify({
+                roomID, userID, msgType,
+                content: {
+                    playlistID: playStates.playing,
+                    duration: displaying.elem ? displaying.elem.duration : 0,
+                    progress: displaying.elem ? displaying.elem.currentTime : 0,
+                    isPaused: displaying.elem ? displaying.elem.paused : true,
+                    date: Date.now()
+                }
+            }))
+        }
+
+        function exitRoom() {
+            ws.send(JSON.stringify({ roomID, userID, msgType: 'exit-room' }))
+        }
+
+        ws.onopen = () => {
+            const sendContent = { sessionID, playlist: playStates.order, how: playStates.how }
+            if(roomCode) sendContent.requestRoomID = roomCode
+            ws.send(JSON.stringify({
+                msgType: roomCode ? 'join-room' : 'create-room',
+                content: sendContent
+            }))
+        }
+
+        ws.onmessage = msg => {
+            handleMessage(JSON.parse(msg.data));
+        }
+
+        ws.onerror = err => {
+            console.error(err);
+        }
+
+        ws.onclose = () => {
+            roomMode.activate = false;
+            roomMode.syncProgress = null;
+            roomMode.exitRoom = null;
+            roomMode.requestUpdatePlaylist = null;
+            roomMode.playlist = {};
+            roomMode.order = [];
+            roomMode.extra = {};
+
+            if(popupWindowVisibility) showPopup(roomPopup);
+            const join_room_menu = document.getElementById('join-room-menu')
+            join_room_menu.onclick = () => showPopup(roomPopup);
+            join_room_menu.firstElementChild.textContent = '创建/加入房间';
+            
+            showNotification('与房间的连接已断开');
+        }
+
+        function updateJoinRoomMenu() {
+            function newRoomPopup() {
+                popupWindow.innerHTML = 
+                `<div class='room-popup'>
+                    <div class='room-info'>您当前所在的房间号是<strong>${roomID}</strong></div>
+                    <button id='exit-room'>离开房间</button>
+                </div>`
+
+                document.getElementById('exit-room').onclick = () => {
+                    exitRoom();
+                }
+            }
+            const join_room_menu = document.getElementById('join-room-menu')
+            join_room_menu.onclick = () => showPopup(newRoomPopup)
+            join_room_menu.firstElementChild.textContent = '查看/离开房间';
+            showPopup(newRoomPopup);
+        }
+    }
+    function roomPopup() {
+        popupWindow.innerHTML = 
+        `<div class='room-popup'>
+            <button id='create-room'>点击创建房间</button>
+            <form id='join-room'>
+                <input type='text' name='room-code' placeholder='房间号'>
+                <button type='submit'>加入房间</button>
+            </form>
+        </div>
+        `
+
+        document.getElementById('create-room').onclick = () => {room(null)};
+        document.getElementById('join-room').onsubmit = evt => {
+            evt.preventDefault();
+            const code = evt.target['room-code'].value;
+            if(!code || !/^[0-9]{4}$/.test(code)) {
+                showNotification('请填写正确的房间号以加入');
+            } else {
+                room(code);
+            }
+        }
+        
+    }
+
+    document.getElementById('user-center').onclick = () => {showNotification('这个功能还在开发中~')}
+    document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist);
+    document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
+    document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile);
+    document.getElementById('upload-manager').onclick = () => showPopup(uploadManager);
+    document.getElementById('join-room-menu').onclick = () => showPopup(roomPopup);
     document.getElementById('logout').onclick = () => {
         // clean up
         closePopup();
         Cookies.remove('session-id');
         window.removeEventListener('resize', windowResized);
         document.removeEventListener('keydown', keyboardControl);
+        roomMode.activate && roomMode.exitRoom();
         // process to login
         askLogin();
         showNotification('登出成功!', 'success')
     }
-    document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile)
-    document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist)
-    document.getElementById('upload-manager').onclick = () => showPopup(uploadManager)
-    document.getElementById('user-center').onclick = () => {console.log(displaying.elem.duration)}
-
+    
     // init
     // load playlist info on load
     getPlaylist();
@@ -1265,18 +1527,6 @@ to { transform: translateX(-100%); }
     margin-top: 20vh;
     text-align: center;
     margin-bottom: 50px;
-
-    input:not(input[type='checkbox']) {
-        width: var(--input-width);
-        height: var(--input-height);
-        border: 1px solid black;
-        border-radius: 10px;
-        display: block;
-        margin: 20px auto;
-        padding: 0 20px;
-        box-sizing: border-box;
-    }
-    input:focus {outline: none;}
     
     #show-password {
         position: absolute;
@@ -1308,6 +1558,17 @@ to { transform: translateX(-100%); }
         height: 20px;
     }
 }
+#login-form input:not(input[type='checkbox']) {
+    width: var(--input-width);
+    height: var(--input-height);
+    border: 1px solid black;
+    border-radius: 10px;
+    display: block;
+    margin: 20px auto;
+    padding: 0 20px;
+    box-sizing: border-box;
+}
+#login-form input:focus {outline: none;}
 #login-form button {
     width: calc(var(--input-width) - 50px);
     height: calc(var(--input-height) - 10px);
@@ -1794,6 +2055,15 @@ to { transform: translateX(-100%); }
     .manage-block:last-child {margin-bottom: unset;}
 }
 
+/* .room-popup .room-info {
+
+}
+.room-popup button {
+    
+}
+.room-popup input[type='text'] {
+
+} */
 /* mobile view */
 @media screen and (max-width: 1023px) {
     #notification-container .notification {
