@@ -231,7 +231,7 @@ function checkAutoSync(roomID) {
         const [userID, { ws, lastSyncProgress }] = session;
         if(+userID === openedRooms[roomID].master) return;
         
-        if(Math.abs(getRealProgress(master_progress) - getRealProgress(lastSyncProgress)) > 500) {
+        if(Math.abs(getRealProgress(master_progress) - getRealProgress(lastSyncProgress)) > 1000) {
             sendProgressSyncRequest(master_progress, ws);
         }
     })
