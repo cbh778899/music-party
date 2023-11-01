@@ -36,6 +36,7 @@ exports.login = async function(req, res) {
         } else if(user.password === password) {
             userID = user.id;
             ret.result = 'login-success';
+            await deleteFrom('login_records', { user_id: userID });
         }
     }
 
