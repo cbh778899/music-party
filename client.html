@@ -1188,7 +1188,8 @@ async function party() {
 
     }
     function room(roomCode = null) {
-        const ws = new WebSocket(`wss://${/^.*:\/\/([^\/]*).*$/.exec(window.location.href)[1]}/ws/room`);
+        const ws_urls = /^(http|https):\/\/([^\/]*).*$/.exec(window.location.href).slice(1, 3)
+        const ws = new WebSocket(`ws${ws_urls[0] === 'https' ? 's' : ''}://${ws_urls[1]}/ws/room`);
         let userID, roomID;
 
         function handleMessage(msg) {
