@@ -50,6 +50,8 @@ async function createRoom({sessionID, playlist, how}, ws, req) {
         do {
             room_id = generateRoomCode();
         } while(openedRooms[room_id]);
+        
+        const userName = await getOne('accounts', 'account', { id: user_id });
 
         openedRooms[room_id] = {
             last_manual_update: 0,
@@ -58,7 +60,11 @@ async function createRoom({sessionID, playlist, how}, ws, req) {
             master: user_id,
             playlist, how,
             sessions: {
-                [user_id]: { ws, req, lastSyncProgress: {}, lastActivate: Date.now() }
+                [user_id]: { 
+                    ws, req, userName,
+                    lastSyncProgress: {}, 
+                    lastActivate: Date.now()
+                }
             }
         }
 
@@ -66,7 +72,8 @@ async function createRoom({sessionID, playlist, how}, ws, req) {
             msgType: 'room-created',
             content: { 
                 roomID: room_id,
-                userID: user_id
+                userID: user_id,
+                userName
             }
         }))
     } else endSession(ws, 'ejection');
@@ -86,12 +93,18 @@ async function joinRoom({sessionID, requestRoomID, playlist}, ws, req) {
     if(openedRooms[requestRoomID].sessions[user_id]) {
         exitRoom(requestRoomID, user_id);
     }
-    openedRooms[requestRoomID].sessions[user_id] = { ws, req, lastSyncProgress: {}, lastActivate: Date.now() };
+    const userName = await getOne('accounts', 'account', { id: user_id });
+    openedRooms[requestRoomID].sessions[user_id] = { 
+        ws, req, userName,
+        lastSyncProgress: {}, 
+        lastActivate: Date.now()
+    }
     openedRooms[requestRoomID].joined_users ++;
     const merged_playlist = Array.from(new Set([...openedRooms[requestRoomID].playlist, ...playlist]));
     openedRooms[requestRoomID].playlist = merged_playlist;
+
     const shared_content = {
-        userName: await getOne('accounts', 'account', { id: user_id }),
+        userName,
         playlistOrder: merged_playlist,
         playlistInfo: await getPlaylistByIDs(merged_playlist),
         howToPlay: openedRooms[requestRoomID].how
@@ -209,9 +222,7 @@ function syncProgress(roomID, userID, progress, ws) {
 
 function checkAutoSync(roomID) {
     const room = openedRooms[roomID]
-    if(!room.sessions[room.master]) {
-        openedRooms[roomID].master = Object.keys(room.sessions)[0]
-    }
+    room.sessions[room.master] || newMaster(roomID)
     const master_progress = room.sessions[room.master].lastSyncProgress
     Object.entries(room.sessions).forEach(session => {
         const [userID, { ws, lastSyncProgress }] = session;
@@ -239,16 +250,29 @@ function respondAutoSync(roomID, userID, content, ws) {
 
 function initiateRoomSync(roomID, sessions = null) {
     if(!sessions) sessions = openedRooms[roomID].sessions;
+    sessions[openedRooms[roomID].master] || newMaster(roomID)
+    const username_list = Object.values(sessions).map(e=>e.userName);
+    const master_username = sessions[openedRooms[roomID].master].userName
     Object.entries(sessions).forEach(session => {
         const [ userID, { lastActivate, ws } ] = session;
 
         if(lastActivate < Date.now() - 10000) {
             exitRoom(roomID, userID, null, 'ejection');
         } else {
-            ws.send(JSON.stringify({msgType: 'request-sync-progress'}));
+            ws.send(JSON.stringify({
+                msgType: 'sync-info',
+                content: {
+                    users: username_list,
+                    master: master_username
+                }
+            }));
             openedRooms[roomID].responded_sync = 0;
         }
     })
+}
+
+function newMaster(roomID) {
+    openedRooms[roomID].master = Object.keys(openedRooms[roomID].sessions)[0]
 }
 
 setInterval(() => {
