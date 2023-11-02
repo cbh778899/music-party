@@ -5,8 +5,9 @@
         <script src="src/hls.js"></script>
         <script src="src/js.cookie.js"></script>
         <link rel="stylesheet" href="src/bootstrap-icons.css">
+        <link rel="stylesheet" type="text/css" href="src/toastify.min.css">
         <!-- 
-            Thanks for jsDeliver providing such amazing libraries
+            Thanks for jsDelivr providing such amazing libraries
             Some of our users might not able to access through the cdn, so we have to download it to our server
             But we will never forgot where those libraries from and this is for PERSONAL USE ONLY.
 
@@ -14,69 +15,6 @@
             https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js
             https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css 
         -->
-        <script type="text/javascript">
-            function notification(notificationContainer = null) {
-                let notifications = [];
-                let totalHeight = 0;
-
-                if(!notificationContainer) {
-                    notificationContainer = document.createElement('div');
-                    notificationContainer.id = 'notification-container';
-                    document.body.appendChild(notificationContainer);
-                }
-
-                function updateTransform(isRemoving = false, removeNode = null) {
-                    const transform = `translateY(calc(0px - (var(--notification-margin) * ${notifications.length}) - ${totalHeight}px))`;
-                    if(!isRemoving) {
-                        notifications.forEach(e=>e.style.transform = transform)
-                    } else {
-                        const all_notifications = Array.from(removeNode.parentNode.children);
-                        const notifs_after = all_notifications.slice(all_notifications.indexOf(removeNode))
-
-                        notifs_after.forEach(e=>{
-                            e.style.transitionDuration = '0s';
-                        })
-                        notifications.forEach(e=>e.style.transform = transform)
-                        notificationContainer.clientHeight;
-                        notifs_after.forEach(e=>{
-                            e.style.transitionDuration = '.5s';
-                        })
-                    }
-                }
-
-                async function removeElem(elem, elemHeight) {
-                    if(notifications.filter(e=>e===elem).length) {
-                        const hidePosition = notificationContainer.clientHeight - elem.getBoundingClientRect().top + 20;
-                        const transformStr = elem.style.transform
-                        new Animation(new KeyframeEffect(elem, [
-                            {'transform': transformStr},
-                            {'transform': `${transformStr.slice(0, -2)} - 10px))`},
-                            {'transform': `${transformStr.slice(0, -2)} - 10px + ${hidePosition}px))`},
-                        ], { duration: 500, fill: 'forwards' }), document.timeline).play()
-                        await new Promise(s=>setTimeout(s, 500));
-                        notifications = notifications.filter(e=>e!==elem);
-                        totalHeight = Math.max(totalHeight - elemHeight, 0);
-                        updateTransform(true, elem);
-                        elem.remove();
-                    }
-                }
-
-                return function showNotification(content, type = 'info', time = 5000) {
-                    const elem = document.createElement('div');
-                    elem.className = `notification ${type} clickable`;
-                    elem.textContent = content;
-                    notificationContainer.appendChild(elem);
-
-                    const height = elem.clientHeight;
-                    totalHeight += height;
-                    notifications.push(elem);
-                    updateTransform();
-
-                    elem.onclick = () => removeElem(elem, height)
-                    setTimeout(()=>removeElem(elem, height), time)
-                }
-            }
-        </script>
         <script type="text/javascript">
 window.onload = function() {
 'use strict';
@@ -114,7 +52,13 @@ const popupWindow = document.getElementById('popup-window');
 const main = document.getElementById('main');
 
 // SECTION: notification
-const showNotification = notification(notificationContainer);
+const showNotification = (text, className = 'info', duration = 5000) => {
+    Toastify({
+        text, className, duration,
+        close: true, 
+        position: "center", gravity: 'bottom'
+    }).showToast();
+}
 
 // SECTION: popup
 let popupWindowVisibility = false;
@@ -223,15 +167,34 @@ function askLogin() {
 async function party() {
 
     const sessionID = Cookies.get('session-id')
-    const user_login_validated = await (await fetch(`/account/validate-login`,{
-        method: 'POST',
-        body: JSON.stringify({ sessionID }),
-        headers: { 'Content-Type': 'application/json' }
-    })).json();
-    if(!user_login_validated) {
-        Cookies.remove('session-id');
-        askLogin();
-    }
+    // validate current login information
+    await (async function () {
+        const user_login_validated = await (await fetch(`/account/validate-login`,{
+            method: 'POST',
+            body: JSON.stringify({ sessionID }),
+            headers: { 'Content-Type': 'application/json' }
+        })).json();
+        if(!user_login_validated) {
+            Cookies.remove('session-id');
+            askLogin();
+        }
+    })()
+
+    // check hls capability, if not capable return to login page
+    let HLSType = null;
+
+    (function () {
+        if(document.createElement('video').canPlayType('application/x-mpegURL')) {
+            HLSType = 'browser'
+        } else if(Hls.isSupported()) {
+            HLSType = 'library'
+        } else {
+            Cookies.remove('session-id');
+            askLogin();
+            showNotification('您的浏览器似乎不支持通过HLS播放!')
+        }
+    })();
+
 
     // init states
     const PLAY_WAYS = ['loop', 'single', 'random', 'playlist']
@@ -273,18 +236,27 @@ async function party() {
     };
 
     // functions
+    function createHLSController(bound_elem, type) {
+        let hls;
+        if(HLSType === 'library') {
+            hls = new Hls();
+            hls.attachMedia(bound_elem);
+        }
+
+        return function(url) {
+            if(HLSType === 'browser') {
+                bound_elem.src = url;
+            } else if(HLSType === 'library') {
+                hls.loadSource(url);
+            }
+        }
+    }
+
     function loadHls(bound_elem, type) {
-        const hls = Hls.isSupported() ?
-            new Hls() : (function(){
-                showNotification('您的浏览器不支持通过HLS播放!', 'error')
-                Cookies.remove('session-id')
-                askLogin();
-            })();
+        const hls = createHLSController(bound_elem, type);
 
-        hls.attachMedia(bound_elem);
-
-        return (url, startPlay = true)=>{
-            hls.loadSource(url);
+        return async (url, startPlay = true)=>{
+            hls(url)
             if(displaying.type !== type) {
                 if(displaying.elem) {
                     displaying.elem.style.display = 'none';
@@ -1388,6 +1360,12 @@ async function party() {
     }
 
     document.getElementById('user-center').onclick = () => {showNotification('这个功能还在开发中~')}
+    // document.getElementById('user-center').onclick = () => {
+    //     // audio_component.audioTracks.forEach(e => {
+    //     //     alert(`${e.id} ${e.enabled}`)
+    //     // })
+    //     alert(audio_component.audioTracks.length)
+    // }
     document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist);
     document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile);
@@ -1457,8 +1435,7 @@ to { transform: translateX(-100%); }
 
 /* notifications */
 
-#popup-container,
-#notification-container {
+#popup-container {
     width: 100vw;
     height: 100vh;
     position: fixed;
@@ -1467,36 +1444,33 @@ to { transform: translateX(-100%); }
     pointer-events: none;
 }
 
-#notification-container {
-    z-index: 100;
-    --notification-margin: 20px;
-
-    .notification {
-        position: relative;
-        top: 100%;
-        transition-duration: .5s;
-        margin: auto;
-        margin-bottom: var(--notification-margin);
-        width: 20%;
-        height: fit-content;
-        padding: 20px;
-        color: white;
-        z-index: 5;
-        pointer-events: initial;
-        border-radius: 7px;
-        font-size: 15px;
-        text-align: center;
-    }
-
-    .notification.info { background-color: dodgerblue; }
-    .notification.success { background-color: limegreen; }
-
-    .notification.err,
-    .notification.error { background-color: red; }
-
-    .notification.warn,
-    .notification.warning { background-color: gold; text-shadow: 1px 1px 2px black; }
+.toastify {
+    min-width: 20%;
+    background: unset;
+    font-size: 15px;
+    padding: 20px;
+    border-radius: 7px;
+    text-align: center;
 }
+
+.toastify .toast-close {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    opacity: 0;
+    display: block;
+}
+
+.toastify.info { background: dodgerblue; }
+.toastify.success { background: limegreen; }
+
+.toastify.err,
+.toastify.error { background: red; }
+
+.toastify.warn,
+.toastify.warning { background: gold; text-shadow: 1px 1px 2px black; }
 
 
 /* popup */
@@ -2093,8 +2067,8 @@ to { transform: translateX(-100%); }
 }
 /* mobile view */
 @media screen and (max-width: 1023px) {
-    #notification-container .notification {
-        width: 50%;
+    .toastify {
+        min-width: 50%;
         font-size: 40px;
         border-radius: 15px;
     }
@@ -2299,5 +2273,6 @@ to { transform: translateX(-100%); }
         <div id="notification-container"></div>
         <div id="popup-container"><div id="popup-window"></div></div>
         <div id="main"></div>
+        <script type="text/javascript" src="src/toastify-js.js"></script>
     </body>
 </html>
