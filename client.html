@@ -1237,10 +1237,10 @@ async function party() {
         }
 
         function syncProgress(waiting_sync) {
-            const { playlistID, progress, isPaused, delayed, date } = waiting_sync;
+            const { playlistID, progress, isPaused } = waiting_sync;
             if(playlistID !== playStates.playing) playStates.playing = playlistID;
             playMedia();
-            displaying.elem.currentTime = isPaused || delayed < 100 ? progress : progress + (delayed + (Date.now() - date)) / 1000
+            displaying.elem.currentTime = progress
             isPaused && displaying.elem.pause();
         }
 
@@ -1271,10 +1271,8 @@ async function party() {
                 roomID, userID, msgType,
                 content: {
                     playlistID: playStates.playing,
-                    duration: displaying.elem ? displaying.elem.duration : 0,
                     progress: displaying.elem ? displaying.elem.currentTime : 0,
-                    isPaused: displaying.elem ? displaying.elem.paused : true,
-                    date: Date.now()
+                    isPaused: displaying.elem ? displaying.elem.paused : true
                 }
             }))
         }
@@ -1360,12 +1358,6 @@ async function party() {
     }
 
     document.getElementById('user-center').onclick = () => {showNotification('这个功能还在开发中~')}
-    // document.getElementById('user-center').onclick = () => {
-    //     // audio_component.audioTracks.forEach(e => {
-    //     //     alert(`${e.id} ${e.enabled}`)
-    //     // })
-    //     alert(audio_component.audioTracks.length)
-    // }
     document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist);
     document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile);

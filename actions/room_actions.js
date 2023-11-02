@@ -183,15 +183,10 @@ async function updateRoomPlaylist(roomID, userID, { playlist, deletePlaylist }, 
     })
 }
 
-function sendProgressSyncRequest({ playlistID, progress, isPaused, date }, ws) {
-    const current_date = Date.now();
+function sendProgressSyncRequest({ playlistID, progress, isPaused }, ws) {
     ws.send(JSON.stringify({
         msgType: 'sync-progress',
-        content: {
-            playlistID, progress, isPaused,
-            delayed: isPaused ? 0 : current_date - date,
-            date: current_date
-        }
+        content: { playlistID, progress, isPaused }
     }))
 }
 
@@ -212,15 +207,6 @@ function syncProgress(roomID, userID, progress, ws) {
     openedRooms[roomID].last_manual_update = Date.now();
 }
 
-function getRealProgress({duration, progress, date, isPaused}) {
-    duration = Math.ceil(duration * 1000)
-    progress = Math.ceil(progress * 1000)
-    const delayed_progress = isPaused ?
-        progress : progress + (Date.now() - date)
-    
-    return delayed_progress > duration ? delayed_progress - duration : delayed_progress
-}
-
 function checkAutoSync(roomID) {
     const room = openedRooms[roomID]
     if(!room.sessions[room.master]) {
@@ -231,7 +217,7 @@ function checkAutoSync(roomID) {
         const [userID, { ws, lastSyncProgress }] = session;
         if(+userID === openedRooms[roomID].master) return;
         
-        if(Math.abs(getRealProgress(master_progress) - getRealProgress(lastSyncProgress)) > 1000) {
+        if(master_progress.progress - lastSyncProgress.progress > 1) {
             sendProgressSyncRequest(master_progress, ws);
         }
     })
