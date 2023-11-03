@@ -220,6 +220,14 @@ function syncProgress(roomID, userID, progress, ws) {
     openedRooms[roomID].last_manual_update = Date.now();
 }
 
+function delayedProgress({progress, date, isPaused}) {
+    let delay = 0;
+    if(!isPaused) {
+        delay = (Math.abs(Date.now() - date) / 1000).toPrecision(5);
+    }
+    return progress + delay;
+}
+
 function checkAutoSync(roomID) {
     const room = openedRooms[roomID]
     room.sessions[room.master] || newMaster(roomID)
@@ -228,7 +236,7 @@ function checkAutoSync(roomID) {
         const [userID, { ws, lastSyncProgress }] = session;
         if(+userID === openedRooms[roomID].master) return;
         
-        if(master_progress.progress - lastSyncProgress.progress > 1) {
+        if(Math.abs(delayedProgress(master_progress) - delayedProgress(lastSyncProgress)) > 1) {
             sendProgressSyncRequest(master_progress, ws);
         }
     })
