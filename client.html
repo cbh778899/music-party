@@ -48,6 +48,7 @@ const VinylFill = formatIcon('vinyl-fill');
 const notificationContainer = document.getElementById('notification-container');
 const popupContainer = document.getElementById('popup-container');
 const popupWindow = document.getElementById('popup-window');
+const contextMenuContainer = document.getElementById('context-menu-container');
 const main = document.getElementById('main');
 
 // SECTION: notification
@@ -83,6 +84,30 @@ popupContainer.onclick = evt => {
     if(evt.target === popupContainer) {
         closePopup();
     }
+}
+
+// SECTION: context menu
+let onTextMenuClose = null;
+
+function showContextMenu(elem, onclose = null) {
+    elem.classList.add('context-menu');
+    contextMenuContainer.appendChild(elem);
+    contextMenuContainer.style.pointerEvents = 'initial';
+    onTextMenuClose = onclose;
+}
+function closeContextMenu() {
+    contextMenuContainer.innerHTML = ''
+    contextMenuContainer.style.pointerEvents = 'none';
+    onTextMenuClose && onTextMenuClose();
+    onTextMenuClose = null;
+}
+contextMenuContainer.onclick = evt => {
+    if(evt.target !== contextMenuContainer) return;
+    closeContextMenu();
+}
+contextMenuContainer.oncontextmenu = evt => {
+    evt.preventDefault();
+    closeContextMenu();
 }
 
 // SECTION: utils
@@ -788,7 +813,7 @@ async function party() {
         playStates.how = PLAY_WAYS[idx === PLAY_WAYS.length - 1 ? 0 : idx + 1]
 
         if(roomMode.activate) {
-            roomMode.requestUpdatePlaylist(true);
+            roomMode.requestUpdatePlaylist({wayOnly: true});
         }
     }
     
@@ -998,7 +1023,148 @@ async function party() {
 
         cancelBtn.onclick = cleanUp;
     }
-    async function showPlaylist() {
+    function showPlaylist() {
+
+        let bulk_select_mode = false, selected_all = false;
+        let selectedPlaylists = {}
+        let bulkSelectBtns = { bulkSelect: null, bulkSelectAll: null }
+
+        function startBulkSelect(elem = null) {
+            bulk_select_mode = true;
+            elem && elem.click();
+        }
+
+        function endBulkSelect(removeElem = false) {
+            bulk_select_mode = false;
+            document.querySelectorAll('.media.bulk-selected')
+            .forEach(e=>removeElem ? e.remove() : e.classList.remove('bulk-selected'));
+            selectedPlaylists = {};
+        }
+
+        function clearBulkSelectBtns() {
+            bulkSelectBtns = { bulkSelect: null, bulkSelectAll: null }
+        }
+
+        function updateBtnText() {
+            selected_all = Object.keys(selectedPlaylists).length === loading_playlist_order.length
+
+            if(bulkSelectBtns.bulkSelect) {
+                bulkSelectBtns.bulkSelect.textContent = 
+                    bulk_select_mode ? '取消批量选择' : '批量选择';
+            }
+            if(bulkSelectBtns.bulkSelectAll) {
+                bulkSelectBtns.bulkSelectAll.textContent =
+                    selected_all ? '取消全选' : '全选'
+            }
+        }
+
+        function musicContextMenu(evt, id, index) {
+            evt.preventDefault();
+            
+            const contextMenu = document.createElement('div');
+            contextMenu.className = 'playlist-context-menu'
+            contextMenu.style.left = `${evt.pageX}px`;
+            contextMenu.style.top = `${evt.pageY}px`;
+
+            const removeFromPlaylist = document.createElement('div');
+            removeFromPlaylist.className = 'item'
+            removeFromPlaylist.textContent = '删除'
+            removeFromPlaylist.onclick = () => {
+                if(!bulk_select_mode) {
+                    bulk_select_mode = true;
+                    evt.target.click();
+                }
+                for(const idx in selectedPlaylists) {
+                    roomMode.activate ?
+                        roomMode.order[idx] = null :
+                        playStates.order[idx] = null
+                }
+                roomMode.activate ?
+                    roomMode.order = roomMode.order.filter(e=>e !== null) :
+                    playStates.order = playStates.order.filter(e=>e !== null);
+
+                roomMode.activate && roomMode.requestUpdatePlaylist({directUpdate: true})
+
+                endBulkSelect(true);
+                closeContextMenu();
+                if(!playStates.order.length) showPlaylist();
+            }
+
+            const moveToFront = document.createElement('div');
+            moveToFront.className = 'item';
+            moveToFront.textContent = '移动到最前面';
+            moveToFront.onclick = () => {
+                if(!bulk_select_mode) {
+                    bulk_select_mode = true;
+                    evt.target.click();
+                }
+                for(const idx in selectedPlaylists) {
+                    roomMode.activate ?
+                        roomMode.order[idx] = null :
+                        playStates.order[idx] = null
+                }
+
+                const moved_playlists = Object.values(selectedPlaylists);
+
+                roomMode.activate ?
+                    roomMode.order = moved_playlists.concat(roomMode.order.filter(e =>e!==null)) :
+                    playStates.order = moved_playlists.concat(playStates.order.filter(e =>e!==null))
+
+                roomMode.activate && roomMode.requestUpdatePlaylist({directUpdate: true})
+
+                endBulkSelect(true);
+                closeContextMenu();
+                showPlaylist();
+            }
+
+            const bulkSelect = document.createElement('div')
+            bulkSelect.className = 'item';
+            bulkSelect.onclick = () => {
+                if(bulk_select_mode) {
+                    endBulkSelect();
+                } else {
+                    startBulkSelect(evt.target);
+                }
+                updateBtnText();
+            }
+
+            const bulkSelectAll = document.createElement('div')
+            bulkSelectAll.className = 'item';
+            bulkSelectAll.onclick = () => {
+                if(selected_all) {
+                    endBulkSelect();
+                    bulk_select_mode = true;
+                } else {
+                    bulk_select_mode = true;
+                    document.querySelectorAll('#popup-window #playlist-main .media:not(.bulk-selected)')
+                    .forEach(e=>e.click());
+                }
+            }
+
+            const cancelOperate = document.createElement('div')
+            cancelOperate.className = 'item';
+            cancelOperate.textContent = '取消';
+            cancelOperate.onclick = closeContextMenu;
+
+            bulkSelectBtns = { bulkSelect, bulkSelectAll }
+            updateBtnText();
+
+            contextMenu.appendChild(removeFromPlaylist)
+            contextMenu.appendChild(moveToFront)
+            contextMenu.appendChild(bulkSelect)
+            contextMenu.appendChild(bulkSelectAll)
+            contextMenu.appendChild(cancelOperate)
+
+            showContextMenu(contextMenu, clearBulkSelectBtns)
+            contextMenu.style.left = `${evt.pageX}px`
+            contextMenu.style.top = `${evt.pageY}px`
+            if(contextMenuContainer.offsetWidth - (evt.pageX + contextMenu.offsetWidth) < 0) {
+                contextMenu.style.left = `${evt.pageX - contextMenu.offsetWidth}px`;
+            }
+            contextMenu.offsetWidth;
+            contextMenu.style.transform = 'scaleY(1)';
+        }
+
         if(popupWindowVisibility) popupWindow.innerHTML = ''
 
         const playlist_main = document.createElement('div')
@@ -1007,7 +1173,7 @@ async function party() {
         const loading_playlist_order = roomMode.activate ? roomMode.order : playStates.order
         const loading_playlist = roomMode.activate ? roomMode.playlist : playStates.playlist
         if(loading_playlist_order.length) {
-            loading_playlist_order.forEach(id=>{
+            loading_playlist_order.forEach((id, index)=>{
                 const media = loading_playlist[id];
                 if(!media) return;
 
@@ -1021,12 +1187,25 @@ async function party() {
                 playBtnText.textContent = media.title;
                 
                 playBtn.onclick = () => {
-                    const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
-                    last_playing && last_playing.classList.remove('playing')
-                    playBtn.classList.add('playing')
-                    playStates.playing = media.id;
-                    playMedia(true);
+                    if(bulk_select_mode) {
+                        if(selectedPlaylists[index]) {
+                            delete selectedPlaylists[index];
+                            playBtn.classList.remove('bulk-selected')
+                        } else {
+                            selectedPlaylists[index] = id;
+                            playBtn.classList.add('bulk-selected');
+                        }
+                        updateBtnText();
+                    } else {
+                        const last_playing = document.querySelector('#popup-window #playlist-main .media.playing')
+                        last_playing && last_playing.classList.remove('playing')
+                        playBtn.classList.add('playing')
+                        playStates.playing = media.id;
+                        playMedia(true);
+                    }
                 }
+
+                playBtn.oncontextmenu = evt => musicContextMenu(evt, id, index);
                 
                 playBtn.appendChild(playBtnText);
                 playlist_main.appendChild(playBtn);
@@ -1114,6 +1293,17 @@ async function party() {
                     }
                 }
 
+                const addToPlaylistBtn = document.createElement('div');
+                addToPlaylistBtn.className = 'function-btn clickable'
+                addToPlaylistBtn.textContent = '添加到播放列表'
+                addToPlaylistBtn.onclick = () => {
+                    playStates.order.push(id);
+                    if(roomMode.activate) {
+                        roomMode.requestUpdatePlaylist();
+                    }
+                    showNotification('添加成功!')
+                }
+
                 const deleteBtn = document.createElement('div');
                 deleteBtn.className = 'function-btn clickable danger'
                 deleteBtn.textContent = '删除此文件'
@@ -1153,6 +1343,7 @@ async function party() {
                 manageBlock.appendChild(statusDisplayBar);
                 manageBlock.appendChild(renameBtn);
                 manageBlock.appendChild(deleteBtn);
+                manageBlock.appendChild(addToPlaylistBtn);
                 upload_manager_main.appendChild(manageBlock);
 
                 updateUploadingProgress(statusText, statusDisplayBarBg, status, progress, true);
@@ -1247,7 +1438,7 @@ async function party() {
             isPaused && displaying.elem.pause();
         }
 
-        function requestUpdatePlaylist(wayOnly = false) {
+        function requestUpdatePlaylist({wayOnly = false, directUpdate = false}) {
             // send update request
             if(wayOnly) {
                 ws.send(JSON.stringify({
@@ -1256,7 +1447,10 @@ async function party() {
                     content: { howToPlay: playStates.how }
                 }))
             } else {
-                const content = { playlist: playStates.order }
+                const content = { 
+                    playlist: directUpdate ? roomMode.order : playStates.order,
+                    directUpdate
+                }
                 if(roomMode.extra.deletePlaylist) {
                     content.deletePlaylist = roomMode.extra.deletePlaylist;
                     delete roomMode.extra.deletePlaylist
@@ -1452,7 +1646,8 @@ to { transform: translateX(-100%); }
 
 /* notifications */
 
-#popup-container {
+#popup-container,
+#context-menu-container {
     width: 100vw;
     height: 100vh;
     position: fixed;
@@ -1512,6 +1707,34 @@ to { transform: translateX(-100%); }
     pointer-events: initial;
     overflow-y: auto;
     padding: 20px;
+}
+
+/* context menu */
+#context-menu-container {
+    z-index: 100;
+    --menu-width: 300px;
+}
+#context-menu-container .context-menu {
+    width: var(--menu-width);
+    height: fit-content;
+    padding: 20px;
+    border: 1px solid black;
+    border-radius: 7px;
+    pointer-events: initial;
+    background-color: white;
+    position: fixed;
+}
+#context-menu-container .context-menu .item {
+    width: 100%;
+    border-radius: inherit;
+    height: fit-content;
+    font-size: 17px;
+    padding: 5px 10px;
+}
+#context-menu-container .context-menu.playlist-context-menu {
+    transform-origin: top center;
+    transform: scaleY(0);
+    transition-duration: .5s;
 }
 
 /* login */
@@ -1967,6 +2190,13 @@ to { transform: translateX(-100%); }
     padding: 0px 5px;
     overflow: hidden;
 }
+#playlist-main .media.bulk-selected {
+    border: 1px solid red;
+    margin-bottom: 3px;
+}
+#playlist-main .media * {
+    pointer-events: none;
+}
 
 #playlist-main .media .title-text {
     text-wrap: nowrap;
@@ -2315,6 +2545,7 @@ to { transform: translateX(-100%); }
         <title>音趴</title>
     </head>
     <body>
+        <div id="context-menu-container"></div>
         <div id="notification-container"></div>
         <div id="popup-container"><div id="popup-window"></div></div>
         <div id="main"></div>
