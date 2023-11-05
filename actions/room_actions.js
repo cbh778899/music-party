@@ -100,13 +100,12 @@ async function joinRoom({sessionID, requestRoomID, playlist}, ws, req) {
         lastActivate: Date.now()
     }
     openedRooms[requestRoomID].joined_users ++;
-    const merged_playlist = Array.from(new Set([...openedRooms[requestRoomID].playlist, ...playlist]));
-    openedRooms[requestRoomID].playlist = merged_playlist;
+    openedRooms[requestRoomID].playlist = openedRooms[requestRoomID].playlist.concat(playlist)
 
     const shared_content = {
         userName,
-        playlistOrder: merged_playlist,
-        playlistInfo: await getPlaylistByIDs(merged_playlist),
+        playlistOrder: openedRooms[requestRoomID].playlist,
+        playlistInfo: await getPlaylistByIDs(openedRooms[requestRoomID].playlist),
         howToPlay: openedRooms[requestRoomID].how
     }
     
@@ -146,20 +145,23 @@ function exitRoom(roomID, userID, ws = null, msg = 'session-end') {
     }
 }
 
-function switchPlayWay(roomID, userID, { howToPlay }, ws) {
+function switchPlayWay(roomID, userID, { howToPlay, playlistID }, ws) {
     if(!openedRooms[roomID] || !openedRooms[roomID].sessions[userID]) {
         endSession(ws, 'room-not-exist');
         return;
     }
+
+    const new_order = howToPlay === 'random' ?
+        [...openedRooms[roomID].playlist].sort(()=> .5 - Math.random()) :
+        openedRooms[roomID].playlist
 
     openedRooms[roomID].how = howToPlay;
     const prepared_msg = JSON.stringify({
         msgType: 'update-play-way',
         content: {
             howToPlay,
-            playlistOrder: howToPlay === 'random' ?
-                [...openedRooms[roomID].playlist].sort(()=> .5 - Math.random()) :
-                openedRooms[roomID].playlist
+            playlistOrder: new_order,
+            playlistIdx: new_order.indexOf(playlistID)
         }
     })
 
@@ -168,38 +170,46 @@ function switchPlayWay(roomID, userID, { howToPlay }, ws) {
     })
 }
 
-async function updateRoomPlaylist(roomID, userID, { playlist, deletePlaylist }, ws) {
+async function updateRoomPlaylist(roomID, userID, { playlist, playlistIdx }, ws) {
     if(!openedRooms[roomID] || !openedRooms[roomID].sessions[userID]) {
         endSession(ws, 'room-not-exist');
         return;
     }
 
-    if(deletePlaylist) { 
-        const deleteIndex = openedRooms[roomID].playlist.indexOf(deletePlaylist)
-        deleteIndex >= 0 && openedRooms[roomID].playlist.splice(deleteIndex, 1);
+    if(openedRooms[roomID].how !== 'random') {
+        openedRooms[roomID].playlist = playlist;
+    } else {
+        // we don't know the order so just filter and get those different out
+        // remove any is not in new playlist
+        openedRooms[roomID].playlist = openedRooms[roomID].playlist.filter(e=>e in playlist)
+        // add any is not in current playlist
+        playlist.filter(e=>!(e in openedRooms[roomID].playlist)).forEach(e=>openedRooms[roomID].playlist.push(e));
     }
-    const new_playlist = Array.from(new Set([...openedRooms[roomID].playlist, ...playlist]));
-    openedRooms[roomID].playlist = new_playlist;
+    const pass_order = openedRooms[roomID].how === 'random' ?
+        [...openedRooms[roomID].playlist].sort(()=> .5 - Math.random()) :
+        openedRooms[roomID].playlist
+
     const prepared_msg = JSON.stringify({
         msgType: 'update-playlist',
         content: {
             howToPlay: openedRooms[roomID].how,
-            playlistInfo: await getPlaylistByIDs(new_playlist),
-            playlistOrder: openedRooms[roomID].how === 'random' ?
-                [...new_playlist].sort(()=> .5 - Math.random()) :
-                new_playlist
+            playlistInfo: await getPlaylistByIDs(openedRooms[roomID].playlist),
+            playlistOrder: pass_order,
+            playlistIdx: openedRooms[roomID].how === 'random' ?
+                pass_order.indexOf(openedRooms[roomID].playlist[playlistIdx]) :
+                playlistIdx
         }
     })
 
-    Object.values(openedRooms[roomID].sessions).forEach(session => {
-        session.ws.send(prepared_msg)
+    Object.values(openedRooms[roomID].sessions).forEach(({ws}) => {
+        ws.send(prepared_msg)
     })
 }
 
-function sendProgressSyncRequest({ playlistID, progress, isPaused }, ws) {
+function sendProgressSyncRequest({ playlistIdx, progress, isPaused }, ws) {
     ws.send(JSON.stringify({
         msgType: 'sync-progress',
-        content: { playlistID, progress, isPaused }
+        content: { playlistIdx, progress, isPaused }
     }))
 }
 
