@@ -43,6 +43,7 @@ const ListUl = formatIcon('list-ul');
 const VolumeUpFill = formatIcon('volume-up-fill');
 const VolumeDownFill = formatIcon('volume-down-fill');
 const VinylFill = formatIcon('vinyl-fill');
+const PencilFill = formatIcon('pencil-fill');
 
 // SECTION: components
 const notificationContainer = document.getElementById('notification-container');
@@ -785,6 +786,7 @@ async function party() {
                 <div class='item clickable' id='update-playlist'><div>更新播放列表</div></div>
                 <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
                 <div class='item clickable' id='upload-manager'><div>管理我的上传</div></div>
+                <div class='item clickable' id='pause-timer'><div>定时关闭</div></div>
                 <div class='item clickable' id='join-room-menu'><div>创建/加入房间</div></div>
                 <div class='item clickable' id='logout'><div>退出登录</div></div>
             </div>
@@ -1068,7 +1070,7 @@ async function party() {
         }
 
         function musicContextMenu(evt, id, index) {
-            evt.preventDefault();
+            evt.preventDefault && evt.preventDefault();
             
             const contextMenu = document.createElement('div');
             contextMenu.className = 'playlist-context-menu'
@@ -1080,10 +1082,16 @@ async function party() {
             removeFromPlaylist.textContent = '删除'
             removeFromPlaylist.onclick = () => {
                 if(!bulk_select_mode) {
+                    if(!evt.target) {
+                        showNotification('请使用批量选择模式进行删除!')
+                        return;
+                    }
                     bulk_select_mode = true;
                     evt.target.click();
                 }
+                let removed_playing = false;
                 for(const idx in selectedPlaylists) {
+                    if(idx === playStates.playing) removed_playing = true;
                     roomMode.activate ?
                         roomMode.order[idx] = null :
                         playStates.order[idx] = null
@@ -1093,6 +1101,11 @@ async function party() {
                     playStates.order = playStates.order.filter(e=>e !== null);
 
                 roomMode.activate && roomMode.requestUpdatePlaylist()
+
+                if(removed_playing) {
+                    playStates.playing = 0;
+                    playMedia({startPlay: displaying.elem && !displaying.elem.paused})
+                }
 
                 endBulkSelect(true);
                 closeContextMenu();
@@ -1108,21 +1121,38 @@ async function party() {
                     return;
                 }
                 if(!bulk_select_mode) {
+                    if(!evt.target) {
+                        showNotification('请使用批量选择模式进行移动!')
+                        return;
+                    }
                     bulk_select_mode = true;
                     evt.target.click();
                 }
-                for(const idx in selectedPlaylists) {
-                    roomMode.activate ?
-                        roomMode.order[idx] = null :
-                        playStates.order[idx] = null
+                let modifying_order = roomMode.activate ? roomMode.order : playStates.order
+                let playing_id = -1;
+                if(playStates.playing >= 0) {
+                    playing_id = modifying_order[playStates.playing]
+                    if(Object.keys(selectedPlaylists).includes(`${playStates.playing}`)) {
+                        selectedPlaylists[playStates.playing] = -1;
+                    } else {
+                        modifying_order[playStates.playing] = -1;
+                    }
                 }
 
-                const moved_playlists = Object.values(selectedPlaylists);
+                for(const idx in selectedPlaylists) {
+                    modifying_order[idx] = null;
+                }
+                const moved_playlists = Object.values(selectedPlaylists).concat(modifying_order.filter(e=>e!==null));
 
-                roomMode.activate ?
-                    roomMode.order = moved_playlists.concat(roomMode.order.filter(e =>e!==null)) :
-                    playStates.order = moved_playlists.concat(playStates.order.filter(e =>e!==null))
+                if(roomMode.activate) roomMode.order = moved_playlists
+                else playStates.order = moved_playlists
 
+                modifying_order = roomMode.activate ? roomMode.order : playStates.order
+                if(playing_id >= 0) {
+                    const playingIdx = modifying_order.indexOf(-1)
+                    modifying_order[playingIdx] = playing_id;
+                    playStates.playing = playingIdx;
+                }
                 roomMode.activate && roomMode.requestUpdatePlaylist()
 
                 endBulkSelect(true);
@@ -1175,6 +1205,7 @@ async function party() {
                 contextMenu.style.left = `${evt.pageX - contextMenu.offsetWidth}px`;
             }
             contextMenu.offsetWidth;
+            contextMenu.style.transitionDuration = '.5s';
             contextMenu.style.transform = 'scaleY(1)';
         }
 
@@ -1182,6 +1213,15 @@ async function party() {
 
         const playlist_main = document.createElement('div')
         playlist_main.id = 'playlist-main'
+
+        const editPlaylistBtn = document.createElement('div');
+        editPlaylistBtn.className = 'edit-playlist clickable'
+        editPlaylistBtn.innerHTML = PencilFill
+        playlist_main.appendChild(editPlaylistBtn);
+        editPlaylistBtn.onclick = evt => {
+            const {top, left, height} = evt.target.getBoundingClientRect();
+            musicContextMenu({pageX: left, pageY: top + height}, null, null)
+        }
         
         const loading_playlist_order = getFollowOrder();
         const loading_playlist = roomMode.activate ? roomMode.playlist : playStates.playlist
@@ -1584,12 +1624,20 @@ async function party() {
         }
         
     }
+    function pauseTimer() {
+        popupWindow.innerHTML = `
+        <div class='pause-timer-main'>
+            <div></div>
+        </div>
+        `
+    }
 
     document.getElementById('user-center').onclick = () => {showNotification('这个功能还在开发中~')}
     document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist);
     document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile);
     document.getElementById('upload-manager').onclick = () => showPopup(uploadManager);
+    document.getElementById('pause-timer').onclick = () => showPopup(pauseTimer);
     document.getElementById('join-room-menu').onclick = () => showPopup(roomPopup);
     document.getElementById('logout').onclick = () => {
         // clean up
@@ -1738,14 +1786,17 @@ to { transform: translateX(-100%); }
     border-radius: inherit;
     height: fit-content;
     font-size: 17px;
-    padding: 5px 10px;
+    padding: 10px;
+}
+#context-menu-container .context-menu .item:hover {
+    background-color: #ededed;
+    cursor: pointer;
 }
 #context-menu-container .context-menu.playlist-context-menu {
     transform-origin: top center;
     transform: scaleY(0);
-    transition-duration: .5s;
+    user-select: none;
 }
-
 /* login */
 
 #login-form {
@@ -2198,6 +2249,16 @@ to { transform: translateX(-100%); }
     border-radius: 5px;
     padding: 0px 5px;
     overflow: hidden;
+    user-select: none;
+}
+#playlist-main .edit-playlist {
+    width: fit-content;
+    height: fit-content;
+    margin: 10px 5px;
+}
+#playlist-main .edit-playlist i {
+    color: dodgerblue;
+    font-size: 20px;
 }
 #playlist-main .media.bulk-selected {
     border: 1px solid red;
@@ -2362,6 +2423,13 @@ to { transform: translateX(-100%); }
         border-radius: 15px;
     }
 
+    #context-menu-container {
+        --menu-width: 400px;
+    }
+    #context-menu-container .context-menu .item {
+        font-size: 35px;
+    }
+
     #login-form {
         --input-width: 90vw;
         --input-height: 100px;
@@ -2473,6 +2541,10 @@ to { transform: translateX(-100%); }
     
     #party .media-container .music-title-container .music-title {
         -webkit-text-stroke: 2px black;
+    }
+
+    #playlist-main .edit-playlist i {
+        font-size: 40px;    
     }
 
     #upload-media-container .upload-file-container {
