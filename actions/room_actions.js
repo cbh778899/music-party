@@ -100,7 +100,8 @@ async function joinRoom({sessionID, requestRoomID, playlist}, ws, req) {
         lastActivate: Date.now()
     }
     openedRooms[requestRoomID].joined_users ++;
-    openedRooms[requestRoomID].playlist = openedRooms[requestRoomID].playlist.concat(playlist)
+    const new_added_playlist = playlist.filter(e=>! (e in openedRooms[requestRoomID].playlist))
+    openedRooms[requestRoomID].playlist = openedRooms[requestRoomID].playlist.concat(new_added_playlist)
 
     const shared_content = {
         userName,
@@ -123,7 +124,7 @@ async function joinRoom({sessionID, requestRoomID, playlist}, ws, req) {
         } else {
             ws.send(JSON.stringify({
                 msgType: 'joined-room',
-                content: {...shared_content}
+                content: shared_content
             }))
         }
     })
@@ -233,7 +234,7 @@ function syncProgress(roomID, userID, progress, ws) {
 function delayedProgress({progress, date, isPaused}) {
     let delay = 0;
     if(!isPaused) {
-        delay = (Math.abs(Date.now() - date) / 1000).toPrecision(5);
+        delay = + (Math.abs(Date.now() - date) / 1000).toPrecision(5);
     }
     return progress + delay;
 }

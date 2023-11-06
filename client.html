@@ -482,11 +482,6 @@ async function party() {
             setAudioHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay) :
             setVideoHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay)
 
-        if(document.querySelector("#playlist-main")) {
-            document.querySelector("#playlist-main .media.playing").classList.remove('playing');
-            document.querySelector(`#playlist-main #playlist-play-btn-${media.id}`).classList.add('playing');
-        }
-
         if(media.type === 'audio') {
             audio_title_container.style.display = 'block';
             audio_title.textContent = media.title;
@@ -1048,7 +1043,6 @@ async function party() {
         cancelBtn.onclick = cleanUp;
     }
     function showPlaylist() {
-
         let bulk_select_mode = false, selected_all = false;
         let selectedPlaylists = {}
         let bulkSelectBtns = { bulkSelect: null, bulkSelectAll: null }
@@ -1094,6 +1088,10 @@ async function party() {
             removeFromPlaylist.className = 'item'
             removeFromPlaylist.textContent = '删除'
             removeFromPlaylist.onclick = () => {
+                if(playStates.how === 'random') {
+                    showNotification('当前播放顺序为随机顺序, 无法进行删除!', 'warn');
+                    return;
+                }
                 if(!bulk_select_mode) {
                     if(!evt.target) {
                         showNotification('请使用批量选择模式进行删除!')
@@ -1102,23 +1100,31 @@ async function party() {
                     bulk_select_mode = true;
                     evt.target.click();
                 }
-                let removed_playing = false;
+
+                let modifying_order = roomMode.activate ? roomMode.order: playStates.order;
+                const playing_id = modifying_order[playStates.playing];
+                
+                modifying_order[playStates.playing] = -1;
+
                 for(const idx in selectedPlaylists) {
-                    if(idx === playStates.playing) removed_playing = true;
-                    roomMode.activate ?
-                        roomMode.order[idx] = null :
-                        playStates.order[idx] = null
+                    modifying_order[idx] = null;
                 }
-                roomMode.activate ?
-                    roomMode.order = roomMode.order.filter(e=>e !== null) :
-                    playStates.order = playStates.order.filter(e=>e !== null);
 
-                roomMode.activate && roomMode.requestUpdatePlaylist()
+                modifying_order = modifying_order.filter(e=>e !== null);
+                if(roomMode.activate) roomMode.order = modifying_order
+                else playStates.order = modifying_order
 
-                if(removed_playing) {
+                modifying_order = roomMode.activate ? roomMode.order: playStates.order;
+                const playingIdx = modifying_order.indexOf(-1)
+                if(playingIdx >= 0) {
+                    modifying_order[playingIdx] = playing_id;
+                    playStates.playing = playingIdx;
+                } else {
                     playStates.playing = 0;
                     playMedia({startPlay: displaying.elem && !displaying.elem.paused})
                 }
+
+                roomMode.activate && roomMode.requestUpdatePlaylist();
 
                 endBulkSelect(true);
                 closeContextMenu();
@@ -1246,7 +1252,6 @@ async function party() {
                 const playBtn = document.createElement('div');
                 playBtn.className = 'media clickable'
                 index === playStates.playing && playBtn.classList.add('playing')
-                playBtn.id = `playlist-play-btn-${media.id}`;
 
                 const playBtnText = document.createElement('div')
                 playBtnText.className = 'title-text';
@@ -1488,7 +1493,9 @@ async function party() {
         function syncPlaylist({playlistOrder, playlistInfo, howToPlay, playlistIdx}) {
             roomMode.order = playlistOrder;
             playStates.how = howToPlay;
-            playStates.playing = playlistIdx || playStates.playing || -1;
+            playStates.playing = 
+                playlistIdx >= 0 ? playlistIdx : 
+                playStates.playing >= 0 ? playStates.playing : -1
             if(playlistInfo) {
                 for(const media of playlistInfo) roomMode.playlist[media.id] = media;
             }
@@ -1510,7 +1517,7 @@ async function party() {
                     roomID, userID,
                     content: { 
                         howToPlay: playStates.how,
-                        playlistID: roomMode.order[playStates.playing]
+                        playlistID: roomMode.order[playStates.playing],
                     }
                 }))
             } else {
