@@ -424,7 +424,7 @@ async function party() {
         const playing_id = getFollowOrder()[playStates.playing]
         let removed_playing = false;
         // check if any media removed
-        Object.keys(playStates.playlist).filter(e=>!updatedIDs.includes(e))
+        Object.keys(playStates.playlist).filter(e=>!updatedIDs.includes(+e))
         .forEach(removedMedia => {
             let media_id = +removedMedia;
             if(playing_id === media_id) removed_playing = true;
