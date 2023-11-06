@@ -881,8 +881,8 @@ async function party() {
                     if(progress === 'finished') getPlaylist()
 
                     const msg = 
-                        progress === 'upload' ? `[${playlist_name}] 上传中... ${`${additional}`.padStart(2, '0')}${additional}%` :
-                        progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${`${additional}`.padStart(2, '0')}${additional}%` :
+                        progress === 'upload' ? `[${playlist_name}] 上传中... ${`${additional}`.padStart(2, '0')}%` :
+                        progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${`${additional}`.padStart(2, '0')}%` :
                         progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
                         progress === 'aborted' ? `[${playlist_name}] 上传中断!` : 
                         progress === 'aborted-failed' ? `[${playlist_name}] 上传无法中断, 请等待上传完成后手动删除!` : 
