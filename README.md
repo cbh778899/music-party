@@ -23,6 +23,12 @@ You can listen to musics uploaded by yourself with your friends!
 **FFmpeg**: 2023-04-06-git-b564ad8eac-full
 
 # 开发进度
+**06/11/2023**  
+- 添加编辑播放列表功能;  
+- 改进同步策略;  
+- 添加定时关闭功能;  
+- 预计添加功能以控制同步策略;  
+
 **02/11/2023**  
 - 同时使用hls.js和浏览器自身支持，现已支持大部分浏览器;  
 - 添加toastify提示;  
