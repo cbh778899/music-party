@@ -1423,7 +1423,7 @@ async function party() {
     }
     function room(roomCode = null) {
         const ws_urls = /^(http|https):\/\/(.*)$/.exec(BASE_URL).slice(1, 3)
-        const ws = new WebSocket(`ws${ws_urls[0] === 'https' ? 's' : ''}://${ws_urls[1]}/ws/room`);
+        const ws = new WebSocket(`ws${ws_urls[0].slice(4)}://${ws_urls[1]}/ws/room`);
         let userID, roomID, joined_users = [], master = null, neverSynced = true;
 
         function handleMessage(msg) {
