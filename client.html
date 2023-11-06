@@ -1292,7 +1292,8 @@ async function party() {
     async function uploadManager() {
         function updateUploadingProgress(elem, displayElem, status, progress, isFirstTime = false) {
             const progress_percent = Math.floor(Math.max(progress * 100, 0))
-            elem.textContent = '上传进度: ' +
+            console.log(status)
+            elem.textContent = 
                 status === 'pending' ? '正在上传文件' : 
                 status === 'fragmenting' ? `正在进行文件分片, 进度${progress_percent}%` : 
                 '上传已完成'
