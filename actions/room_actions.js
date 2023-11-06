@@ -100,7 +100,7 @@ async function joinRoom({sessionID, requestRoomID, playlist}, ws, req) {
         lastActivate: Date.now()
     }
     openedRooms[requestRoomID].joined_users ++;
-    const new_added_playlist = playlist.filter(e=>! (e in openedRooms[requestRoomID].playlist))
+    const new_added_playlist = playlist.filter(e=>!openedRooms[requestRoomID].playlist.includes(e))
     openedRooms[requestRoomID].playlist = openedRooms[requestRoomID].playlist.concat(new_added_playlist)
 
     const shared_content = {
@@ -182,9 +182,9 @@ async function updateRoomPlaylist(roomID, userID, { playlist, playlistIdx }, ws)
     } else {
         // we don't know the order so just filter and get those different out
         // remove any is not in new playlist
-        openedRooms[roomID].playlist = openedRooms[roomID].playlist.filter(e=>e in playlist)
+        openedRooms[roomID].playlist = openedRooms[roomID].playlist.filter(e=>playlist.includes(e))
         // add any is not in current playlist
-        playlist.filter(e=>!(e in openedRooms[roomID].playlist)).forEach(e=>openedRooms[roomID].playlist.push(e));
+        playlist.filter(e=>!openedRooms[roomID].playlist.includes(e)).forEach(e=>openedRooms[roomID].playlist.push(e));
     }
     const pass_order = openedRooms[roomID].how === 'random' ?
         [...openedRooms[roomID].playlist].sort(()=> .5 - Math.random()) :
