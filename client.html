@@ -249,6 +249,7 @@ async function party() {
     let manual_update_media_time = false,
         manual_toggle_play = false,
         can_sync_media_time = false;
+    let pause_after = 0;
     
     const roomMode = { 
         activate: false, playlist: {}, order: [], extra: {},
@@ -664,6 +665,14 @@ async function party() {
         manual_toggle_play = false;
     }
 
+    function pauseTimerAction() {
+        if(displaying.elem) {
+            manual_toggle_play = true;
+            displaying.elem.pause();
+        }
+        pause_after = 0;
+    }
+
     function mediaElemEvtListeners() {
         let media_time_update_cooldown = 0;
 
@@ -675,8 +684,12 @@ async function party() {
             })
         }
         function mediaTimeUpdated() {
-            if(Date.now() < media_time_update_cooldown && !manual_update_media_time) return;
-            media_time_update_cooldown = Date.now() + 100;
+            const current = Date.now();
+            if(pause_after && current >= pause_after) {
+                pauseTimerAction();
+            }
+            if(current < media_time_update_cooldown && !manual_update_media_time) return;
+            media_time_update_cooldown = current + 100;
 
             if(can_sync_media_time && roomMode.activate) roomMode.syncProgress();
 
@@ -783,11 +796,11 @@ async function party() {
             <div class='items'>
                 <div class='item clickable' id='user-center'><div>用户中心</div></div>
                 <div class='item clickable' id='get-playlist'><div>播放列表</div></div>
-                <div class='item clickable' id='update-playlist'><div>更新播放列表</div></div>
+                <div class='item clickable' id='pause-timer'><div>定时关闭</div></div>
                 <div class='item clickable' id='upload-media'><div>上传媒体文件</div></div>
                 <div class='item clickable' id='upload-manager'><div>管理我的上传</div></div>
-                <div class='item clickable' id='pause-timer'><div>定时关闭</div></div>
                 <div class='item clickable' id='join-room-menu'><div>创建/加入房间</div></div>
+                <div class='item clickable' id='update-playlist'><div>更新播放列表</div></div>
                 <div class='item clickable' id='logout'><div>退出登录</div></div>
             </div>
         </div>
@@ -873,8 +886,8 @@ async function party() {
                     if(progress === 'finished') getPlaylist()
 
                     const msg = 
-                        progress === 'upload' ? `[${playlist_name}] 上传中... ${additional < 10 && '0' || ''}${additional}%` :
-                        progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${additional < 10 && '0' || ''}${additional}%` :
+                        progress === 'upload' ? `[${playlist_name}] 上传中... ${`${additional}`.padStart(2, '0')}${additional}%` :
+                        progress === 'waiting-process' ? `[${playlist_name}] 生成分片文件中... ${`${additional}`.padStart(2, '0')}${additional}%` :
                         progress === 'finished' ? `[${playlist_name}] 上传完成!` : 
                         progress === 'aborted' ? `[${playlist_name}] 上传中断!` : 
                         progress === 'aborted-failed' ? `[${playlist_name}] 上传无法中断, 请等待上传完成后手动删除!` : 
@@ -1625,20 +1638,97 @@ async function party() {
         
     }
     function pauseTimer() {
-        popupWindow.innerHTML = `
-        <div class='pause-timer-main'>
-            <div></div>
-        </div>
-        `
+        function millisecondToMinute(millisecond) {
+            const seconds = Math.round(millisecond / 1000)
+            const minute = `${Math.floor(seconds / 60)}`.padStart(2, '0')
+            const second = `${seconds % 60}`.padStart(2, '0')
+            return `${minute}:${second}`
+        }
+
+        function updateTimeLeft() {
+            if(pause_after && popupWindowVisibility) requestAnimationFrame(updateTimeLeft)
+            if(pause_after) {
+                const now = Date.now();
+                if(now >= pause_after) {
+                    pauseTimerAction();
+                    pauseTimerInfo.textContent = '已停止播放';
+                } else {
+                    pauseTimerInfo.textContent = `将在${millisecondToMinute(pause_after - now)}后停止播放`;
+                }
+            } else {
+                pauseTimerInfo.textContent = '当前还未设置定时关闭'
+            }
+        }
+
+        function setTimer(minutes) {
+            if(!pause_after) requestAnimationFrame(updateTimeLeft);
+            pause_after = Date.now() + Math.floor(minutes * 60000);
+        }
+        popupWindow.innerHTML = ''
+        const pauseTimerMain = document.createElement('div')
+        pauseTimerMain.className = 'pause-timer-main'
+
+        const pauseTimerInfo = document.createElement('div');
+        pauseTimerInfo.className = 'info section';
+
+        const preSetTimers = document.createElement('div');
+        preSetTimers.className = 'pre-set-timers section'
+
+        for(let i = 1; i <= 6; i++) {
+            const timer_minutes = i*10;
+            const preSetTimer = document.createElement('div');
+            preSetTimer.className = 'timer clickable';
+            preSetTimer.textContent = timer_minutes;
+            preSetTimer.onclick = () => setTimer(timer_minutes);
+            preSetTimers.appendChild(preSetTimer)
+        }
+
+        const customTimerForm = document.createElement('form');
+        customTimerForm.className = 'custom-timer-form section';
+        customTimerForm.innerHTML = 
+        `<span>自定义<input name='customer-timer' type='text' value='${
+            localStorage.getItem('custom-pause-play-timer') || 45
+        }'>分钟后停止</span>`
+        customTimerForm.onsubmit = evt => {
+            evt.preventDefault();
+            const value = + evt.target['customer-timer'].value
+            if(!value || value < 1 || value > 1440) {
+                showNotification('自定义时间应为1-1440中的数字!');
+                return;
+            }
+            localStorage.setItem('custom-pause-play-timer', value);
+            setTimer(value);
+        }
+
+        const submitBtn = document.createElement('button')
+        submitBtn.className = 'clickable'
+        submitBtn.type = 'submit';
+        submitBtn.textContent = '设定计时器'
+
+        const cancelBtn = document.createElement('button')
+        cancelBtn.className = 'clickable'
+        cancelBtn.type = 'button';
+        cancelBtn.textContent = '取消计时器'
+        cancelBtn.onclick = () => { pause_after = 0 }
+
+        customTimerForm.appendChild(submitBtn)
+        customTimerForm.appendChild(cancelBtn)
+
+        pauseTimerMain.appendChild(pauseTimerInfo);
+        pauseTimerMain.appendChild(preSetTimers);
+        pauseTimerMain.appendChild(customTimerForm);
+        popupWindow.appendChild(pauseTimerMain);
+
+        requestAnimationFrame(updateTimeLeft)
     }
 
     document.getElementById('user-center').onclick = () => {showNotification('这个功能还在开发中~')}
     document.getElementById('get-playlist').onclick = () => showPopup(showPlaylist);
-    document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
+    document.getElementById('pause-timer').onclick = () => showPopup(pauseTimer);
     document.getElementById('upload-media').onclick = () => showPopup(uploadMediaFile);
     document.getElementById('upload-manager').onclick = () => showPopup(uploadManager);
-    document.getElementById('pause-timer').onclick = () => showPopup(pauseTimer);
     document.getElementById('join-room-menu').onclick = () => showPopup(roomPopup);
+    document.getElementById('update-playlist').onclick = async () => { await getPlaylist(); showNotification('更新完成') };
     document.getElementById('logout').onclick = () => {
         // clean up
         closePopup();
@@ -2407,6 +2497,70 @@ to { transform: translateX(-100%); }
     color: orange;
 }
 
+.pause-timer-main {
+    --pre-set-timer-size: 60px;
+    --pre-set-timers-margin: 20px;
+    --section-width: calc(var(--pre-set-timer-size) * 6 + var(--pre-set-timers-margin) * 5);
+    --common-font-size: 20px;
+}
+
+.pause-timer-main .info {
+    text-align: center;
+    font-size: calc(var(--common-font-size) * 1.5);
+}
+
+.pause-timer-main .pre-set-timers {
+    display: flex;
+    margin: auto;
+    width: var(--section-width);
+}
+
+.pause-timer-main .pre-set-timers .timer {
+    margin: auto;
+    border: 3px solid black;
+    text-align: center;
+    user-select: none;
+
+    width: var(--pre-set-timer-size);
+    height: var(--pre-set-timer-size);
+    line-height: calc(var(--pre-set-timer-size) - 3px);
+    font-size: calc(var(--pre-set-timer-size) / 3);
+    border-radius: var(--pre-set-timer-size);
+}
+
+.pause-timer-main .custom-timer-form {
+    margin: auto;
+    width: var(--section-width);
+    text-align: center;
+}
+.pause-timer-main .custom-timer-form span {
+    font-size: var(--common-font-size);
+    display: block;
+}
+.pause-timer-main .custom-timer-form input {
+    width: 50px;
+    height: fit-content;
+    font-size: var(--common-font-size);
+    text-align: center;
+    box-sizing: border-box;
+    border: none;
+    border-bottom: 1px solid black;
+    padding: 0px;
+}
+.pause-timer-main .custom-timer-form input:focus {
+    outline: none;
+}
+.pause-timer-main .custom-timer-form button {
+    width: 40%;
+    height: calc(var(--common-font-size) * 2);
+    margin: 20px;
+    border: 1px solid;
+    border-radius: 7px;
+    font-size: var(--common-font-size);
+}
+.pause-timer-main .section {
+    margin-top: 30px;
+}
 /* mobile view */
 @media screen and (max-width: 1023px) {
     .toastify {
@@ -2620,6 +2774,23 @@ to { transform: translateX(-100%); }
     .room-popup #room-users .user {
         font-size: 40px;
         margin-bottom: 20px;
+    }
+
+    .pause-timer-main {
+        --pre-set-timer-size: 100px;
+        --pre-set-timers-margin: 30px;
+        --common-font-size: 40px;
+    }
+    .pause-timer-main .custom-timer-form input {
+        width: 100px;
+    }
+    .pause-timer-main .custom-timer-form button {
+        margin: 30px;
+        border: 3px solid;
+        border-radius: 15px;
+    }
+    .pause-timer-main .section {
+        margin-top: 50px;
     }
 }
         </style>
