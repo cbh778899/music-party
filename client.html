@@ -23,6 +23,7 @@ window.onload = function() {
 const FILE_CHUNK_SIZE = 1024 * 1024;
 const MEDIA_FRAGMENT_DURATION = 10;
 const MAX_RETRY = 3;
+const BASE_URL = /^(.*)\/$/.exec(window.location.href)[1];
 
 // SECTION: icon
 const formatIcon = className => `<i class='bi bi-${className}'></i>`;
@@ -127,7 +128,7 @@ function askLogin() {
         const account = evt.target.account.value;
         const password = evt.target.password.value;
         
-        fetch(`/account/login`, {
+        fetch(`${BASE_URL}/account/login`, {
             method: 'POST',
             body: JSON.stringify({account, password}),
             headers: {'Content-Type': 'application/json'}
@@ -189,7 +190,7 @@ function askLogin() {
 async function party() {
     const sessionID = Cookies.get('session-id')
     // validate current login information
-    const user_login_validated = await (await fetch(`/account/validate-login`,{
+    const user_login_validated = await (await fetch(`${BASE_URL}/account/validate-login`,{
         method: 'POST',
         body: JSON.stringify({ sessionID }),
         headers: { 'Content-Type': 'application/json' }
@@ -323,7 +324,7 @@ async function party() {
 
         async function init() {
             const estFragments = Math.ceil((await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION);
-            referenceID = + (await (await fetch('/playlist/pre-upload', {
+            referenceID = + (await (await fetch(`${BASE_URL}/playlist/pre-upload`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -341,7 +342,7 @@ async function party() {
         async function abort() {
             if(currentChunkIndex !== -1 && referenceID !== -1) {
                 currentChunkIndex = -1;
-                const abort_result = await (await fetch(`/playlist/`, {
+                const abort_result = await (await fetch(`${BASE_URL}/playlist/`, {
                     method: 'DELETE',
                     body: JSON.stringify({id: referenceID, sessionID}),
                     headers: {'Content-Type': 'application/json'},
@@ -370,7 +371,7 @@ async function party() {
                 sessionID, referenceID, chunkIndex: currentChunkIndex
             })
 
-            const upload_result = await (await fetch(`/playlist/upload-chunk?${searchParams.toString()}`, {
+            const upload_result = await (await fetch(`${BASE_URL}/playlist/upload-chunk?${searchParams.toString()}`, {
                 method: 'POST',
                 body: chunk,
                 headers: {'Content-Type': 'application/octet-stream'}
@@ -417,7 +418,7 @@ async function party() {
 
     async function getPlaylist() {
         const user_playlists = await (await fetch(
-            `/playlist/user-playlist?${new URLSearchParams({sessionID}).toString()}`)
+            `${BASE_URL}/playlist/user-playlist?${new URLSearchParams({sessionID}).toString()}`)
         ).json()
         const updatedIDs = user_playlists.map(e=>e.id);
 
@@ -461,7 +462,7 @@ async function party() {
         if(referenceID > 0) query.referenceID = referenceID;
         return await (
             await fetch(
-                `/playlist/${url}-upload-status?${new URLSearchParams(query).toString()}`
+                `${BASE_URL}/playlist/${url}-upload-status?${new URLSearchParams(query).toString()}`
             )
         ).json()
     }
@@ -479,8 +480,8 @@ async function party() {
         const media_list = roomMode.activate ? roomMode.playlist : playStates.playlist
         const media = media_list[getFollowOrder()[playStates.playing]]
         media.type === 'audio' ?
-            setAudioHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay) :
-            setVideoHls(`/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay)
+            setAudioHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay) :
+            setVideoHls(`${BASE_URL}/playlist/${sessionID}/${media.id}/${media.filename}.m3u8`, startPlay)
 
         if(media.type === 'audio') {
             audio_title_container.style.display = 'block';
@@ -1348,7 +1349,7 @@ async function party() {
                 renameBtn.textContent = '更新标题'
                 renameBtn.onclick = async () => {
                     if(titleText.value && titleText.value !== title) {
-                        const update_result = (await fetch(`/playlist/update-title`, {
+                        const update_result = (await fetch(`${BASE_URL}/playlist/update-title`, {
                             method: 'POST',
                             body: JSON.stringify({ sessionID, id, title: titleText.value }),
                             headers: { 'Content-Type': 'application/json' }
@@ -1386,7 +1387,7 @@ async function party() {
                             showNotification('请再点击一次以确认删除', 'info', 10000);
                             last_click = Date.now();
                         } else {
-                            const delete_result = await (await fetch(`/playlist`, {
+                            const delete_result = await (await fetch(`${BASE_URL}/playlist`, {
                                 method: 'DELETE',
                                 body: JSON.stringify({ sessionID, id }),
                                 headers: { 'Content-Type': 'application/json' }
@@ -1421,7 +1422,7 @@ async function party() {
 
     }
     function room(roomCode = null) {
-        const ws_urls = /^(http|https):\/\/([^\/]*).*$/.exec(window.location.href).slice(1, 3)
+        const ws_urls = /^(http|https):\/\/(.*)$/.exec(BASE_URL).slice(1, 3)
         const ws = new WebSocket(`ws${ws_urls[0] === 'https' ? 's' : ''}://${ws_urls[1]}/ws/room`);
         let userID, roomID, joined_users = [], master = null, neverSynced = true;
 
