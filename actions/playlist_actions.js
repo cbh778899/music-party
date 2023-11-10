@@ -20,23 +20,23 @@ async function finishUpload(filename, id, user_id, title, type, process_file) {
     fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
 
     // run fragmenting in child process
-    exec(
-        `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}`+
-        `-map 0:a -c copy -start_number 0 `+
-        `-hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`, 
-        async (err, stdout, stderr) => {
+    const fragment_cmd = 
+    `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}-map 0:a -c copy -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`;
+
+    exec(fragment_cmd, async (err, stdout, stderr) => {
         
         if(err) {
+            // for debug, not delete original file
             console.error(err.message);
+            console.log(fragment_cmd);
             await update('uploads', { upload_status: 'failed' }, { id });
         } else {
             await update('uploads', { upload_status: 'finished' }, { id });
             const { lastID } = await insert('playlists', { user_id, title, type, filename });
             const playlist_id = await getOne('playlists', 'id', { rowid: lastID });
             await update('uploads', { playlist_id }, { id });
+            fs.existsSync(process_file) && fs.unlinkSync(process_file);
         }
-        
-        fs.existsSync(process_file) && fs.unlinkSync(process_file);
     })
 
     return true;
