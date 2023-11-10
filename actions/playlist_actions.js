@@ -22,7 +22,7 @@ async function finishUpload(filename, id, user_id, title, type, process_file) {
     // run fragmenting in child process
     exec(
         `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}`+
-        `-map 0:a ${type === 'video' ? '-c:v libx264 ' : ''}-c:a aac -start_number 0 `+
+        `-map 0:a -c copy -start_number 0 `+
         `-hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`, 
         async (err, stdout, stderr) => {
         
