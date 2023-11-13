@@ -317,21 +317,21 @@ async function party() {
     async function uploadFile(file, rename, progressControl) {
         let totalChunks = Math.ceil(file.size / FILE_CHUNK_SIZE), 
             currentChunkIndex = 0,
-            fileType = file.type.split('/').shift(),
+            fileType = file.type.split('/'),
             referenceID = -1, 
             updateProgress = progressControl(abort),
             retry = 0, pauseUpdateTill = 0;
 
         async function init() {
-            const estFragments = Math.ceil((await getMediaDuration(file, fileType)) / MEDIA_FRAGMENT_DURATION);
+            const estFragments = Math.ceil((await getMediaDuration(file, fileType[0])) / MEDIA_FRAGMENT_DURATION);
             referenceID = + (await (await fetch(`${BASE_URL}/playlist/pre-upload`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
                     sessionID,
                     title: (rename || file.name),
-                    suffix: file.name.split('.').pop(),
-                    fileType,
+                    suffix: `${fileType[1]}.${file.name.split('.').pop()}`,
+                    fileType: fileType[0],
                     estChunks: totalChunks,
                     estFragments
                 })

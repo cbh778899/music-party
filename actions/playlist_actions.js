@@ -12,7 +12,7 @@ let dirName;
 fs.existsSync(`./${FILES_DIR}`) || fs.mkdirSync(`./${FILES_DIR}`)
 fs.existsSync(`./${PROCESS_DIR}`) || fs.mkdirSync(`./${PROCESS_DIR}`)
 
-async function finishUpload(filename, id, user_id, title, type, process_file) {
+async function finishUpload({filename, suffix, id, user_id, title, type, process_file}) {
 
     await update('uploads', { upload_status: 'fragmenting' }, { id })
 
@@ -20,14 +20,17 @@ async function finishUpload(filename, id, user_id, title, type, process_file) {
     fs.existsSync(playlist_dir) || fs.mkdirSync(playlist_dir)
 
     // run fragmenting in child process
+    const extract_source = `${type === 'video' ? '-map 0:v ' : ''}-map 0:a`
+    const codec_format = /(wav|mp4|mp3|ogg|webm|mov)/i.test(suffix.split('.')[0]) ?
+        '-c copy' : `-c:a aac${type === 'video' ? ' -c:v libx264' : ''}`
     const fragment_cmd = 
-    `ffmpeg -i "${process_file}" ${type === 'video' ? '-map 0:v ' : ''}-map 0:a -c copy -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`;
+    `ffmpeg -i "${process_file}" ${extract_source} ${codec_format} -start_number 0 -hls_time 10 -hls_list_size 0 -f hls "${playlist_dir}/${filename}.m3u8"`;
 
     exec(fragment_cmd, async (err, stdout, stderr) => {
         
         if(err) {
             // for debug, not delete original file
-            console.error(err.message);
+            console.error(err);
             console.log(fragment_cmd);
             await update('uploads', { upload_status: 'failed' }, { id });
         } else {
@@ -117,13 +120,13 @@ exports.uploadChunk = async function(req, res) {
         let result = false;
         const playlistInfo = await getOne('uploads', '*', { user_id, id: + referenceID })
         if(playlistInfo) {
-            const { id, type, title, upload_status, filename, est_chunks, suffix } = playlistInfo;
+            const { upload_status, filename, est_chunks, suffix } = playlistInfo;
             const process_file = `./${PROCESS_DIR}/${filename}.${suffix}`
             if(upload_status === 'pending') {
                 result = true;
                 fs.appendFileSync(process_file, data)
                 if(+ chunkIndex === est_chunks - 1) {
-                    await finishUpload(filename, id, user_id, title, type, process_file);
+                    await finishUpload({...playlistInfo, user_id, process_file});
                 }
             }
         }
